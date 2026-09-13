@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  q-commute:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: qcommute:latest
+    container_name: qcommute-sih2026
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Persist downloaded OSM graphs and SQLite database
+      - ./backend/data:/app/backend/data

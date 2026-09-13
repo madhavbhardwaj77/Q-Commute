@@ -179,21 +179,20 @@ class GeneticRouter:
         t0 = time.perf_counter()
 
         # ── Initialize population ─────────────────────────────────────
-        from backend.optimization.fitness import make_cost_fn
-        cost_fn = make_cost_fn(self.overlay, self.refs)
+        try:
+            base_len = nx.shortest_path(self.G, self.src, self.dst, weight="length")
+        except Exception:
+            base_len = [self.src, self.dst]
 
-        population: List[List[int]] = []
-        for _ in range(self.pop_size):
+        population: List[List[int]] = [list(base_len)]
+        for _ in range(1, self.pop_size):
             path = _ga_random_path(self.G, self.src, self.dst, self.rng)
             if path:
                 path = _remove_cycles(path)
                 path = _repair_path(self.G, path, self.src, self.dst, traffic_overlay=self.overlay, refs=self.refs)
             if not path or len(path) < 2:
-                # Minimal fallback using traffic cost
-                try:
-                    path = nx.shortest_path(self.G, self.src, self.dst, weight=cost_fn)
-                except Exception:
-                    path = [self.src, self.dst]
+                mutated = _mutate(list(base_len), self.rng, mutation_rate=0.45)
+                path = _repair_path(self.G, mutated, self.src, self.dst, traffic_overlay=self.overlay, refs=self.refs) or list(base_len)
             population.append(path)
 
         # ── Initial fitnesses ─────────────────────────────────────────

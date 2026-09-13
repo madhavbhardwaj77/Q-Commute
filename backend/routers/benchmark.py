@@ -83,7 +83,7 @@ def _run_one(algo: str, src_id: str, dst_id: str, G, src, dst, ovl, refs,
     """Run one algorithm and capture result safely."""
     try:
         if algo == "Dijkstra":
-            raw = run_dijkstra(G, src, dst, ovl, refs)
+            raw = run_dijkstra(G, src, dst, ovl, refs, routing_mode="classical")
         elif algo == "Genetic Algorithm":
             from backend.optimization.genetic import GeneticRouter
             ga = GeneticRouter(G, src, dst, ovl, refs, n_particles=n_particles, n_iter=n_iter)

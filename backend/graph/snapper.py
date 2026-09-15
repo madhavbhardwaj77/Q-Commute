@@ -1,4 +1,4 @@
-﻿"""
+"""
 Coordinate-to-Node Snapper
 
 Finds the nearest graph node to a (lat, lon) coordinate.
@@ -66,17 +66,20 @@ def snap_to_node(G: nx.MultiDiGraph, lat: float, lon: float) -> int:
     if G.number_of_nodes() == 0:
         raise ValueError("Graph has no nodes")
 
-    if "crs" in G.graph:
-        # Real OSMnx graph — use fast spatial index
-        import osmnx as ox
-        node_id = ox.nearest_nodes(G, X=lon, Y=lat)
-        log.debug("Snapped (%.5f, %.5f) -> node %d (osmnx)", lat, lon, node_id)
-        return int(node_id)
-    else:
-        # Synthetic/test graph — use brute-force Haversine
-        node_id = _snap_haversine(G, lat, lon)
-        log.debug("Snapped (%.5f, %.5f) -> node %d (haversine)", lat, lon, node_id)
-        return node_id
+    if "crs" in G.graph and G.graph["crs"] is not None:
+        # Real OSMnx graph — use fast spatial index if available
+        try:
+            import osmnx as ox
+            node_id = ox.nearest_nodes(G, X=lon, Y=lat)
+            log.debug("Snapped (%.5f, %.5f) -> node %d (osmnx)", lat, lon, node_id)
+            return int(node_id)
+        except Exception as e:
+            log.debug("ox.nearest_nodes fallback to haversine (%s)", e)
+
+    # Fallback to Haversine distance
+    node_id = _snap_haversine(G, lat, lon)
+    log.debug("Snapped (%.5f, %.5f) -> node %d (haversine)", lat, lon, node_id)
+    return node_id
 
 
 def node_coords(G: nx.MultiDiGraph, node_id: int) -> Tuple[float, float]:

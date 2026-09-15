@@ -15,7 +15,7 @@ export default function MatplotlibModal({ isOpen, onClose, sourceId, destination
     : API.getPlotRadarUrl() + `&k=${reloadKey}`;
 
   return (
-    <div className="modal modal-open z-50 bg-black/50 backdrop-blur-xs">
+    <div className="modal modal-open z-[1000] bg-black/50 backdrop-blur-xs">
       <div className="modal-box max-w-3xl p-0 border border-base-300 shadow-2xl rounded-2xl flex flex-col max-h-[90vh] overflow-hidden bg-base-100">
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-base-200 flex items-center justify-between bg-base-200/50">
@@ -32,12 +32,12 @@ export default function MatplotlibModal({ isOpen, onClose, sourceId, destination
         </div>
 
         {/* Tab Selector */}
-        <div className="px-4 py-2.5 flex items-center justify-between border-b border-base-200 bg-base-100">
-          <div className="tabs tabs-boxed bg-base-200/70 p-1 rounded-xl">
+        <div className="px-4 py-2.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 border-b border-base-200 bg-base-100">
+          <div className="tabs tabs-boxed bg-base-200/70 p-1 rounded-xl flex items-center gap-1">
             {[
-              { id: 'convergence', label: 'Convergence Curves', icon: TrendingUp },
-              { id: 'benchmark', label: 'Tri-Algorithm Benchmark', icon: BarChart3 },
-              { id: 'radar', label: 'Capability Radar Matrix', icon: Compass },
+              { id: 'convergence', label: 'Convergence', icon: TrendingUp },
+              { id: 'benchmark', label: 'Benchmark', icon: BarChart3 },
+              { id: 'radar', label: 'Radar Matrix', icon: Compass },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activePlot === tab.id;
@@ -45,20 +45,20 @@ export default function MatplotlibModal({ isOpen, onClose, sourceId, destination
                 <button
                   key={tab.id}
                   onClick={() => setActivePlot(tab.id)}
-                  className={`tab tab-sm flex items-center gap-1.5 text-xs font-semibold rounded-lg transition ${
+                  className={`tab tab-sm h-auto py-1.5 px-3 flex items-center gap-1.5 text-xs font-semibold rounded-lg transition whitespace-nowrap ${
                     isActive
                       ? 'tab-active bg-primary text-primary-content shadow-xs'
                       : 'text-base-content/70 hover:text-base-content'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{tab.label}</span>
+                  <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{tab.label}</span>
                 </button>
               );
             })}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => setReloadKey(Date.now())}
               className="btn btn-sm btn-square btn-ghost border border-base-300"
@@ -69,7 +69,7 @@ export default function MatplotlibModal({ isOpen, onClose, sourceId, destination
             <a
               href={plotUrl}
               download={`qcommute_${activePlot}.png`}
-              className="btn btn-sm btn-primary gap-1.5 text-xs font-semibold"
+              className="btn btn-sm btn-primary gap-1.5 text-xs font-semibold whitespace-nowrap"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download PNG</span>

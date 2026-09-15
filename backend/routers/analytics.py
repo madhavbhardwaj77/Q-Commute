@@ -174,7 +174,7 @@ async def plot_radar():
     ax.fill(angles, ga_scores, color="#f59e0b", alpha=0.10)
 
     ax.set_ylim(0, 1.05)
-    ax.set_title("Multi-Criteria Capability Radar Matrix\n(Egreen Quanta SIH 2026 Evaluation)", fontsize=11, fontweight="bold", pad=20)
+    ax.set_title("Multi-Criteria Capability Radar Matrix\n(Algorithm Performance Evaluation)", fontsize=11, fontweight="bold", pad=20)
     plt.legend(loc="upper right", bbox_to_anchor=(1.25, 1.1), fontsize=8.5)
 
     buf = io.BytesIO()

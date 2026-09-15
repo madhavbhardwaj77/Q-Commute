@@ -61,7 +61,6 @@ from backend.config import (
 )
 from backend.graph.snapper import path_coords
 from backend.optimization.fitness import path_fitness, edge_cost
-from scipy import stats, optimize
 
 log = logging.getLogger(__name__)
 
@@ -377,25 +376,42 @@ class QPSORouter:
 
         # ---- Initialise population ----------------------------------------
         particles: List[Optional[List[int]]] = []
-        for _ in range(self.n_particles):
-            p = _random_path(self.G, self.src, self.dst, self.rng, traffic_overlay=self.overlay, refs=self.refs)
-            particles.append(p)
-
-        # Fill any failed initialisations with a traffic-aware seed
         try:
             from backend.optimization.fitness import make_cost_fn
             cost_fn = make_cost_fn(self.overlay, self.refs)
-            seed_path = nx.shortest_path(self.G, self.src, self.dst, weight=cost_fn)
         except Exception:
-            try:
-                seed_path = nx.shortest_path(self.G, self.src, self.dst, weight="length")
-            except (nx.NetworkXNoPath, nx.NodeNotFound):
-                return self._error("No path exists between source and destination.")
+            cost_fn = None
 
-        particles = [p if p is not None else list(seed_path) for p in particles]
+        # Seed 0: Geometric shortest distance (baseline heuristic)
+        try:
+            p_geom = nx.shortest_path(self.G, self.src, self.dst, weight="length")
+            particles.append(p_geom)
+        except Exception:
+            p_geom = None
+
+        # Diverse exploratory particles
+        for _ in range(len(particles), self.n_particles):
+            # Generate perturbed heuristic candidate paths
+            def _noisy_weight(u, v, d):
+                l = d.get("length", 100.0)
+                t = d.get("free_flow_time_s", 10.0)
+                noise = float(self.rng.uniform(0.4, 2.8))
+                return (l * float(self.rng.uniform(0.5, 1.8)) + t * float(self.rng.uniform(0.5, 2.5))) * noise
+            try:
+                p = nx.shortest_path(self.G, self.src, self.dst, weight=_noisy_weight)
+                particles.append(p)
+            except Exception:
+                if p_geom:
+                    particles.append(p_geom)
+                else:
+                    p = _random_path(self.G, self.src, self.dst, self.rng, traffic_overlay=self.overlay, refs=self.refs)
+                    particles.append(p)
+
+        if not particles or all(p is None for p in particles):
+            return self._error("No path exists between source and destination.")
 
         # Personal bests and fitnesses
-        pbest_paths   = [list(p) for p in particles]
+        pbest_paths   = [list(p) for p in particles if p is not None]
         pbest_costs   = [path_fitness(self.G, p, self.overlay, self.refs)
                          for p in pbest_paths]
 
@@ -414,7 +430,7 @@ class QPSORouter:
             # Compute mbest path (mean-best approximation)
             mbest_path = _mbest_path(pbest_paths)
 
-            for i in range(self.n_particles):
+            for i in range(len(pbest_paths)):
                 # ---- Quantum update for particle i -------------------------
                 phi1 = self.rng.random()
                 phi2 = self.rng.random()
@@ -424,45 +440,56 @@ class QPSORouter:
                     pbest_paths[i], gbest_path, self.src, self.dst, self.rng
                 )
 
-                # Quantum tunnelling via SciPy distribution sampling
-                tunnel_sample = float(stats.uniform.rvs(scale=1.0, random_state=int(self.rng.integers(0, 100000))))
+                # Quantum tunnelling via Monte Carlo sampling
+                tunnel_sample = float(self.rng.random())
                 if tunnel_sample < self.tunnel_prob:
-                    candidate = _random_path(
-                        self.G, self.src, self.dst, self.rng, traffic_overlay=self.overlay, refs=self.refs
-                    )
-                    if candidate is None:
-                        candidate = list(seed_path)
+                    def _tunnel_w(u, v, d):
+                        if cost_fn:
+                            return cost_fn(u, v, d) * float(self.rng.uniform(0.7, 1.5))
+                        return d.get("length", 100.0) * float(self.rng.uniform(0.5, 2.0))
+                    try:
+                        candidate = nx.shortest_path(self.G, self.src, self.dst, weight=_tunnel_w)
+                    except Exception:
+                        candidate = attractor
                 else:
                     # Quantum contraction/expansion
-                    u_rand = float(stats.uniform.rvs(scale=1.0, random_state=int(self.rng.integers(0, 100000))))
+                    u_rand = float(self.rng.random())
                     if u_rand < beta:
                         # Expansion: draw influence from mbest neighbourhood
                         candidate = _crossover(
                             attractor, mbest_path, self.src, self.dst, self.rng
                         )
                     else:
-                        # Contraction: move toward attractor
-                        candidate = _crossover(
-                            particles[i], attractor, self.src, self.dst, self.rng
-                        )
+                        # Contraction: move toward attractor / fine-tune optimal cost
+                        if it > 3 and cost_fn and float(self.rng.random()) < (it / self.n_iter) * 0.45:
+                            def _opt_w(u, v, d):
+                                return cost_fn(u, v, d) * float(self.rng.uniform(0.92, 1.08))
+                            try:
+                                candidate = nx.shortest_path(self.G, self.src, self.dst, weight=_opt_w)
+                            except Exception:
+                                candidate = _crossover(particles[i], attractor, self.src, self.dst, self.rng)
+                        else:
+                            candidate = _crossover(
+                                particles[i] if i < len(particles) and particles[i] else attractor,
+                                attractor, self.src, self.dst, self.rng
+                            )
 
                 # Repair the candidate path (traffic-aware)
                 repaired = _repair_path(self.G, candidate, self.src, self.dst, traffic_overlay=self.overlay, refs=self.refs)
-                if repaired is None:
-                    repaired = list(seed_path)
+                if repaired is not None:
+                    if i < len(particles):
+                        particles[i] = repaired
 
-                particles[i] = repaired
+                    # ---- Evaluate and update bests ----------------------------
+                    cost = path_fitness(self.G, repaired, self.overlay, self.refs)
 
-                # ---- Evaluate and update bests ----------------------------
-                cost = path_fitness(self.G, repaired, self.overlay, self.refs)
+                    if cost < pbest_costs[i]:
+                        pbest_paths[i] = list(repaired)
+                        pbest_costs[i] = cost
 
-                if cost < pbest_costs[i]:
-                    pbest_paths[i] = list(repaired)
-                    pbest_costs[i] = cost
-
-                if cost < gbest_cost:
-                    gbest_path = list(repaired)
-                    gbest_cost = cost
+                    if cost < gbest_cost:
+                        gbest_path = list(repaired)
+                        gbest_cost = cost
 
             convergence.append({
                 "iteration": it,
@@ -508,6 +535,7 @@ class QPSORouter:
     def _fit_convergence_curve(self, convergence: List[dict]) -> dict:
         """Use SciPy curve_fit to model fitness decay: f(t) = a * exp(-b*t) + c."""
         try:
+            from scipy import optimize
             iters = np.array([c["iteration"] for c in convergence], dtype=float)
             costs = np.array([c["best_cost"] for c in convergence], dtype=float)
             if len(iters) < 4 or np.all(costs == costs[0]):

@@ -22,24 +22,10 @@ export default function Header({ status, onOpenReport }) {
             <h1 className="text-base font-extrabold tracking-tight text-base-content leading-none">
               Q-COMMUTE
             </h1>
-            <span className="badge badge-primary badge-outline badge-xs font-bold">
-              v2.0
-            </span>
           </div>
           <p className="text-[10px] text-base-content/60 font-medium">
             Quantum-Inspired Traffic Optimization · Metaheuristic Engine
           </p>
-        </div>
-
-        {/* SIH and Organization Badges */}
-        <div className="hidden sm:flex items-center gap-2 ml-3 pl-3 border-l border-base-300">
-          <span className="badge badge-neutral badge-sm font-bold gap-1 text-[10px]">
-            <span>SIH 2026</span>
-            <span className="text-primary-content/70">#26137</span>
-          </span>
-          <span className="badge badge-success badge-outline badge-sm font-semibold text-[10px]">
-            Egreen Quanta
-          </span>
         </div>
       </div>
 

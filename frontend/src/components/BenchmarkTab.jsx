@@ -97,11 +97,11 @@ export default function BenchmarkTab({ benchmarkData, loading }) {
     <div className="flex flex-col gap-3">
       {/* Chart.js Comparison */}
       <div className="card bg-base-100 p-2.5 rounded-xl border border-base-300 shadow-2xs">
-        <div className="flex items-center justify-between mb-1.5 px-1">
-          <span className="text-[10px] font-bold text-base-content/70 uppercase tracking-wider">
+        <div className="flex items-center justify-between mb-1.5 px-1 gap-2">
+          <span className="text-[10px] font-bold text-base-content/70 uppercase tracking-wider truncate">
             Comparative Performance Analysis
           </span>
-          <span className="badge badge-outline badge-xs font-semibold">3 Algorithms</span>
+          <span className="badge badge-outline badge-xs font-semibold whitespace-nowrap flex-shrink-0">3 Algorithms</span>
         </div>
         <div className="h-44 w-full">
           <canvas ref={canvasRef} />
@@ -113,11 +113,11 @@ export default function BenchmarkTab({ benchmarkData, loading }) {
         <table className="table table-zebra table-xs w-full">
           <thead>
             <tr className="bg-base-200/60 text-[10px] text-base-content/70 font-bold uppercase tracking-wider">
-              <th>Algorithm</th>
-              <th>Distance</th>
-              <th>Time</th>
-              <th>Objective Cost</th>
-              <th>Compute</th>
+              <th className="text-left">Algorithm</th>
+              <th className="text-right">Distance</th>
+              <th className="text-right">Time</th>
+              <th className="text-right">Objective Cost</th>
+              <th className="text-right">Compute</th>
             </tr>
           </thead>
           <tbody>
@@ -125,18 +125,20 @@ export default function BenchmarkTab({ benchmarkData, loading }) {
               const isCostWinner = r.algorithm === benchmarkData.winner?.lowest_cost;
               return (
                 <tr key={i} className="hover">
-                  <td className="font-bold flex items-center gap-1.5 whitespace-nowrap">
-                    <span>{r.algorithm}</span>
-                    {isCostWinner && (
-                      <span className="badge badge-success badge-xs gap-1 font-bold text-[9px]">
-                        <Trophy className="w-2.5 h-2.5" /> Best
-                      </span>
-                    )}
+                  <td className="font-bold whitespace-nowrap">
+                    <div className="flex items-center gap-1.5">
+                      <span>{r.algorithm}</span>
+                      {isCostWinner && (
+                        <span className="badge badge-success badge-xs gap-1 font-bold text-[9px]">
+                          <Trophy className="w-2.5 h-2.5" /> Best
+                        </span>
+                      )}
+                    </div>
                   </td>
-                  <td className="text-base-content/80 font-medium">{(r.distance_m / 1000).toFixed(2)} km</td>
-                  <td className="text-base-content/80 font-medium">{Math.round(r.travel_time_s)}s</td>
-                  <td className="font-bold text-primary">{r.total_cost.toFixed(4)}</td>
-                  <td className="text-base-content/60 font-mono text-[10px]">{Math.round(r.runtime_ms)} ms</td>
+                  <td className="text-base-content/80 font-medium text-right">{(r.distance_m / 1000).toFixed(2)} km</td>
+                  <td className="text-base-content/80 font-medium text-right">{Math.round(r.travel_time_s)}s</td>
+                  <td className="font-bold text-primary text-right">{r.total_cost.toFixed(4)}</td>
+                  <td className="text-base-content/60 font-mono text-[10px] text-right">{Math.round(r.runtime_ms)} ms</td>
                 </tr>
               );
             })}

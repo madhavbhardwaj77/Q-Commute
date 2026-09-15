@@ -45,29 +45,34 @@ export default function MetricsTab({ routeResult, rerouteDiff }) {
         })}
       </div>
 
-      {/* Hyperparameters Badges */}
+      {/* Hyperparameters Grid */}
       {routeResult.quantum_params && (
-        <div className="card bg-primary/5 border border-primary/20 rounded-xl p-2.5 flex flex-col gap-1.5 shadow-2xs">
-          <div className="flex items-center justify-between">
+        <div className="card bg-base-100 border border-base-300 rounded-xl p-3 flex flex-col gap-2 shadow-2xs">
+          <div className="flex items-center justify-between pb-1 border-b border-base-200">
             <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Quantum Hyperparameters</span>
-            <span className="badge badge-primary badge-xs">Active</span>
+            <span className="badge badge-primary badge-xs font-semibold">Active</span>
           </div>
-          <div className="flex flex-wrap gap-1 text-[11px]">
-            <span className="badge badge-outline badge-sm font-semibold">
-              Particles: {routeResult.quantum_params.n_particles}
-            </span>
-            <span className="badge badge-outline badge-sm font-semibold">
-              Iterations: {routeResult.quantum_params.n_iter}
-            </span>
-            <span className="badge badge-outline badge-sm font-semibold">
-              w_t: {routeResult.quantum_params.weight_time}
-            </span>
-            <span className="badge badge-outline badge-sm font-semibold">
-              w_d: {routeResult.quantum_params.weight_dist}
-            </span>
-            <span className="badge badge-outline badge-sm font-semibold">
-              w_c: {routeResult.quantum_params.weight_cong}
-            </span>
+          <div className="grid grid-cols-5 gap-1.5 text-center">
+            <div className="bg-base-200/60 rounded-lg p-1.5 border border-base-300/40 flex flex-col justify-center">
+              <span className="text-[9px] font-semibold text-base-content/60 uppercase block">Particles</span>
+              <span className="text-xs font-bold text-base-content">{routeResult.quantum_params.n_particles}</span>
+            </div>
+            <div className="bg-base-200/60 rounded-lg p-1.5 border border-base-300/40 flex flex-col justify-center">
+              <span className="text-[9px] font-semibold text-base-content/60 uppercase block">Iter</span>
+              <span className="text-xs font-bold text-base-content">{routeResult.quantum_params.n_iter}</span>
+            </div>
+            <div className="bg-base-200/60 rounded-lg p-1.5 border border-base-300/40 flex flex-col justify-center">
+              <span className="text-[9px] font-semibold text-primary uppercase block">w_time</span>
+              <span className="text-xs font-bold text-primary">{Math.round(routeResult.quantum_params.weight_time * 100)}%</span>
+            </div>
+            <div className="bg-base-200/60 rounded-lg p-1.5 border border-base-300/40 flex flex-col justify-center">
+              <span className="text-[9px] font-semibold text-accent uppercase block">w_dist</span>
+              <span className="text-xs font-bold text-accent">{Math.round(routeResult.quantum_params.weight_dist * 100)}%</span>
+            </div>
+            <div className="bg-base-200/60 rounded-lg p-1.5 border border-base-300/40 flex flex-col justify-center">
+              <span className="text-[9px] font-semibold text-warning uppercase block">w_cong</span>
+              <span className="text-xs font-bold text-warning">{Math.round(routeResult.quantum_params.weight_cong * 100)}%</span>
+            </div>
           </div>
         </div>
       )}

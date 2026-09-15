@@ -19,17 +19,19 @@ export default function TrafficSimulator({
         <h2 className="text-xs font-bold uppercase tracking-wider text-base-content flex items-center gap-1.5">
           <span>🚦</span> Dynamic Traffic Simulation
         </h2>
-        <span className="badge badge-warning badge-sm text-[10px] font-semibold">Live Injection</span>
+        <span className="badge badge-warning badge-sm text-[10px] font-semibold whitespace-nowrap flex-shrink-0">
+          Live Injection
+        </span>
       </div>
 
       {/* Event Type selector */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         <label className="text-[10px] font-bold text-base-content/60 uppercase tracking-wider">Incident Type</label>
-        <div className="join w-full grid grid-cols-3">
+        <div className="grid grid-cols-3 gap-1.5 w-full">
           {[
-            { id: 'congestion', label: '🚦 Congestion', icon: AlertTriangle },
-            { id: 'slowdown', label: '🚧 Roadwork', icon: Construction },
-            { id: 'closure', label: '🚫 Road Closed', icon: Ban },
+            { id: 'congestion', label: 'Congestion', icon: AlertTriangle },
+            { id: 'slowdown', label: 'Roadwork', icon: Construction },
+            { id: 'closure', label: 'Closure', icon: Ban },
           ].map((item) => {
             const Icon = item.icon;
             const isSelected = eventType === item.id;
@@ -37,13 +39,14 @@ export default function TrafficSimulator({
               <button
                 key={item.id}
                 onClick={() => onEventTypeChange(item.id)}
-                className={`btn btn-xs join-item font-bold text-[10px] gap-1 ${
+                className={`btn btn-sm text-[11px] font-semibold px-1 py-1.5 h-auto min-h-[2.35rem] flex flex-col items-center justify-center gap-0.5 rounded-lg transition-all ${
                   isSelected
-                    ? 'btn-warning text-warning-content'
-                    : 'btn-outline border-base-300 text-base-content/70 hover:bg-base-200'
+                    ? 'btn-warning text-warning-content shadow-xs'
+                    : 'bg-base-100 hover:bg-base-200 text-base-content border border-base-300 hover:border-base-content/20'
                 }`}
               >
-                <span>{item.label}</span>
+                <Icon className="w-3.5 h-3.5" />
+                <span className="leading-none">{item.label}</span>
               </button>
             );
           })}
@@ -51,16 +54,16 @@ export default function TrafficSimulator({
       </div>
 
       {/* Severity */}
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         <label className="text-[10px] font-bold text-base-content/60 uppercase tracking-wider">Severity Impact</label>
         <select
           value={severity}
           onChange={(e) => onSeverityChange(e.target.value)}
           className="select select-bordered select-sm w-full text-xs font-medium focus:select-warning"
         >
-          <option value="severe">Severe (12x Travel Delay — Guaranteed Detour)</option>
-          <option value="moderate">Moderate (6x Travel Delay)</option>
-          <option value="mild">Mild (3x Travel Delay)</option>
+          <option value="severe">Severe (12x Delay · Forced Detour)</option>
+          <option value="moderate">Moderate (6x Delay)</option>
+          <option value="mild">Mild (3x Delay)</option>
         </select>
       </div>
 
@@ -110,10 +113,10 @@ export default function TrafficSimulator({
           ) : (
             activeEvents.map((evt, idx) => (
               <div key={idx} className="flex items-center gap-1.5 text-[11px] bg-base-100 p-1.5 rounded border border-warning/30 shadow-2xs">
-                <span className="text-warning">⚠️</span>
-                <div className="flex-1 truncate">
-                  <span className="font-semibold text-base-content">{evt.road_name || 'Corridor Segment'}</span>
-                  <span className="badge badge-warning badge-xs ml-1.5 uppercase font-bold text-[9px]">{evt.event_type}</span>
+                <span className="text-warning flex-shrink-0">⚠️</span>
+                <div className="flex-1 min-w-0 flex items-center justify-between gap-1">
+                  <span className="font-semibold text-base-content truncate">{evt.road_name || 'Corridor Segment'}</span>
+                  <span className="badge badge-warning badge-xs uppercase font-bold text-[9px] flex-shrink-0">{evt.event_type}</span>
                 </div>
               </div>
             ))

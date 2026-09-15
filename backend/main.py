@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import logging
 import os
+import warnings
 from contextlib import asynccontextmanager
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,8 +46,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title       = "Q-Commute API",
-    description = "Quantum-Inspired Metaheuristic Optimization for Intelligent Traffic Routing. SIH 2026 — PS #26137 — Egreen Quanta.",
-    version     = "2.0.0",
+    description = "Quantum-Inspired Metaheuristic Optimization for Intelligent Traffic Routing.",
+    version     = "1.0.0",
     lifespan    = lifespan,
 )
 

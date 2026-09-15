@@ -70,11 +70,11 @@ export default function HistoryTab() {
           ) : (
             history.map((h) => (
               <div key={h.id} className="card bg-base-100 border border-base-300 rounded-lg p-2.5 flex flex-col gap-1 shadow-2xs hover:border-primary/40 transition">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-base-content text-[11px] truncate capitalize">
+                <div className="flex items-center justify-between gap-1">
+                  <span className="font-bold text-base-content text-[11px] truncate capitalize flex-1 min-w-0">
                     {h.source_id.replace(/_/g, ' ')} → {h.destination_id.replace(/_/g, ' ')}
                   </span>
-                  <span className="badge badge-primary badge-outline badge-xs font-semibold">
+                  <span className="badge badge-primary badge-outline badge-xs font-semibold flex-shrink-0">
                     {h.algorithm}
                   </span>
                 </div>

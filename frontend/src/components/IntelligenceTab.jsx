@@ -50,10 +50,12 @@ export default function IntelligenceTab({ routeResult }) {
           x: {
             title: { display: true, text: 'Iteration (t)', font: { size: 10 } },
             grid: { color: 'rgba(0,0,0,0.04)' },
+            ticks: { maxRotation: 0, autoSkip: true, font: { size: 9 } },
           },
           y: {
             title: { display: true, text: 'Objective Cost', font: { size: 10 } },
             grid: { color: 'rgba(0,0,0,0.04)' },
+            ticks: { font: { size: 9 } },
           },
         },
       },
@@ -84,11 +86,13 @@ export default function IntelligenceTab({ routeResult }) {
     <div className="flex flex-col gap-3">
       {/* Chart.js Canvas */}
       <div className="card bg-base-100 p-2.5 rounded-xl border border-base-300 shadow-2xs">
-        <div className="flex items-center justify-between mb-1 px-1">
-          <span className="text-[10px] font-bold text-base-content/70 uppercase tracking-wider">
-            Quantum Convergence Trajectory (Chart.js)
+        <div className="flex items-center justify-between mb-1.5 px-1 gap-2">
+          <span className="text-[10px] font-bold text-base-content/70 uppercase tracking-wider truncate">
+            Convergence Trajectory
           </span>
-          <span className="badge badge-primary badge-outline badge-xs font-semibold">Real-Time</span>
+          <span className="badge badge-primary badge-outline badge-xs font-semibold whitespace-nowrap flex-shrink-0">
+            Real-Time
+          </span>
         </div>
         <div className="h-44 w-full">
           <canvas ref={canvasRef} />
@@ -131,10 +135,10 @@ export default function IntelligenceTab({ routeResult }) {
         <div className="text-[10px] font-bold uppercase tracking-wider text-primary">
           Quantum Delta Potential Well Wave Function Update
         </div>
-        <div className="card bg-base-100 p-2.5 rounded-lg border border-primary/20 font-mono text-[11px] text-base-content shadow-2xs">
+        <div className="card bg-base-100 p-2.5 rounded-lg border border-primary/20 font-mono text-[11px] text-base-content shadow-2xs whitespace-nowrap overflow-x-auto text-center">
           x<sub>i</sub>(t+1) = p<sub>i</sub> ± β · |mbest − x<sub>i</sub>| · ln(1/u)
         </div>
-        <div className="text-[10px] text-base-content/70 leading-tight">
+        <div className="text-[10px] text-base-content/70 leading-relaxed">
           Where β is the quantum contraction coefficient linearly decaying from 1.0 to 0.4, and u ~ Uniform(0,1) sampled via SciPy stats.
         </div>
       </div>

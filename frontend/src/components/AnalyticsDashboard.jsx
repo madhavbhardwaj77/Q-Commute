@@ -18,10 +18,10 @@ export default function AnalyticsDashboard({
 }) {
   const tabs = [
     { id: 'metrics', label: 'Metrics', icon: Gauge },
-    { id: 'intelligence', label: 'Intelligence', icon: Sparkles },
+    { id: 'intelligence', label: 'Quantum', icon: Sparkles },
     { id: 'benchmark', label: 'Benchmark', icon: BarChart2 },
-    { id: 'formulation', label: 'Formulation', icon: FileCode },
-    { id: 'history', label: 'History (DB)', icon: History },
+    { id: 'formulation', label: 'Formula', icon: FileCode },
+    { id: 'history', label: 'History', icon: History },
   ];
 
   return (
@@ -35,14 +35,14 @@ export default function AnalyticsDashboard({
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`tab tab-sm flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-bold rounded-lg transition whitespace-nowrap h-auto ${
+              className={`tab tab-sm flex flex-col items-center justify-center gap-0.5 py-1.5 px-1 text-[10px] font-bold rounded-lg transition whitespace-nowrap h-auto min-w-0 ${
                 isActive
                   ? 'tab-active bg-primary text-primary-content shadow-xs'
                   : 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'
               }`}
             >
               <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="hidden sm:inline">{tab.label}</span>
+              <span className="leading-tight">{tab.label}</span>
             </button>
           );
         })}

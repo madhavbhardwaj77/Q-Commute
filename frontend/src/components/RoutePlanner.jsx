@@ -73,9 +73,9 @@ export default function RoutePlanner({
       </div>
 
       {/* Algorithm Selector Toggle */}
-      <div className="flex flex-col gap-1 pt-0.5">
+      <div className="flex flex-col gap-1.5 pt-0.5">
         <label className="text-[10px] font-bold text-base-content/60 uppercase tracking-wider">Optimizer Engine</label>
-        <div className="join w-full grid grid-cols-3">
+        <div className="grid grid-cols-3 gap-1.5 w-full">
           {[
             { id: 'QPSO', label: '⚛ QPSO' },
             { id: 'Dijkstra', label: '📊 Dijkstra' },
@@ -84,13 +84,13 @@ export default function RoutePlanner({
             <button
               key={item.id}
               onClick={() => onAlgorithmChange(item.id)}
-              className={`btn btn-xs join-item font-bold ${
+              className={`btn btn-sm text-[11px] font-bold px-1 py-1.5 h-auto min-h-[2.35rem] flex items-center justify-center rounded-lg transition-all ${
                 algorithm === item.id
-                  ? 'btn-primary text-primary-content'
-                  : 'btn-outline border-base-300 text-base-content/70 hover:bg-base-200'
+                  ? 'btn-primary text-primary-content shadow-xs'
+                  : 'bg-base-100 hover:bg-base-200 text-base-content border border-base-300 hover:border-base-content/20'
               }`}
             >
-              {item.label}
+              <span className="leading-none whitespace-nowrap">{item.label}</span>
             </button>
           ))}
         </div>

@@ -171,35 +171,35 @@ export default function MapView({
   }, [trafficIncident]);
 
   return (
-    <div className="relative w-full h-full min-h-[400px]">
+    <div className="relative w-full h-full min-h-0">
       <div ref={mapRef} className="w-full h-full" />
 
       {/* Map Legend Overlay */}
-      <div className="absolute bottom-4 left-4 z-[500] card bg-base-100/95 backdrop-blur border border-base-300 rounded-xl p-3 text-xs shadow-lg flex flex-col gap-1.5 pointer-events-auto">
+      <div className="absolute bottom-4 left-4 z-[500] card bg-base-100/95 backdrop-blur-md border border-base-300 rounded-xl p-3 text-xs shadow-lg flex flex-col gap-1.5 pointer-events-auto max-w-[220px]">
         <div className="text-[10px] font-bold uppercase tracking-wider text-base-content/60 mb-0.5">Route Legend</div>
         <div className="flex items-center gap-2">
           <span className="w-3.5 h-1 rounded bg-[#6366f1]" />
-          <span className="font-semibold text-base-content">QPSO (Quantum)</span>
+          <span className="font-semibold text-base-content text-[11px]">QPSO (Quantum)</span>
           <span className="badge badge-primary badge-xs ml-auto">Adaptive</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3.5 h-1 rounded bg-[#10b981]" />
-          <span className="font-semibold text-base-content">Dijkstra (Exact)</span>
+          <span className="font-semibold text-base-content text-[11px]">Dijkstra (Exact)</span>
           <span className="badge badge-accent badge-xs ml-auto">Baseline</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3.5 h-1 rounded bg-[#f59e0b]" />
-          <span className="font-semibold text-base-content">GA (Evolutionary)</span>
+          <span className="font-semibold text-base-content text-[11px]">GA (Evolutionary)</span>
           <span className="badge badge-warning badge-xs ml-auto">Heuristic</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3.5 h-1 rounded bg-[#ef4444]" />
-          <span className="font-semibold text-base-content">Closed Road</span>
+          <span className="font-semibold text-base-content text-[11px]">Closed Road</span>
           <span className="badge badge-error badge-xs ml-auto">Blocked</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3.5 h-1 rounded border-b border-dashed border-base-content/40" />
-          <span className="font-medium text-base-content/70">Previous Path</span>
+          <span className="font-medium text-base-content/70 text-[11px]">Previous Path</span>
         </div>
       </div>
     </div>

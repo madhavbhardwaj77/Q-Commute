@@ -244,7 +244,7 @@ export default function App() {
         </div>
 
         {/* Center Column: Interactive Leaflet Map */}
-        <div className="card bg-base-100 border border-base-300 shadow-sm overflow-hidden">
+        <div className="card bg-base-100 border border-base-300 shadow-sm overflow-hidden h-full min-h-0 relative">
           <MapView
             sourceLoc={sourceLoc}
             destLoc={destLoc}

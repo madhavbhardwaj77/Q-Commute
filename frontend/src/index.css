@@ -30,3 +30,46 @@
   height: 100%;
   z-index: 10;
 }
+
+/* Badge spacing and breathing room */
+.badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding-left: 0.65rem !important;
+  padding-right: 0.65rem !important;
+  padding-top: 0.2rem !important;
+  padding-bottom: 0.2rem !important;
+  min-height: 1.35rem !important;
+  height: auto !important;
+  border-radius: 9999px !important;
+  line-height: 1.1 !important;
+  box-sizing: border-box !important;
+}
+
+.badge-xs {
+  min-height: 1.3rem !important;
+  height: auto !important;
+  font-size: 0.6875rem !important;
+  padding-left: 0.6rem !important;
+  padding-right: 0.6rem !important;
+  padding-top: 0.15rem !important;
+  padding-bottom: 0.15rem !important;
+  line-height: 1 !important;
+  letter-spacing: 0.02em !important;
+}
+
+.badge-sm {
+  min-height: 1.5rem !important;
+  height: auto !important;
+  font-size: 0.75rem !important;
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+  padding-top: 0.2rem !important;
+  padding-bottom: 0.2rem !important;
+  line-height: 1.2 !important;
+}
+
+.badge-outline {
+  border-width: 1.5px !important;
+}

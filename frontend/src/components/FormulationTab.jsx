@@ -22,7 +22,7 @@ export default function FormulationTab({ graphMetrics }) {
           <FileCode className="w-3.5 h-3.5" />
           <span>Multi-Criteria Objective Formulation</span>
         </div>
-        <div className="card bg-base-200/60 border border-base-300 p-2.5 font-mono text-[11px] text-base-content leading-relaxed overflow-x-auto">
+        <div className="w-full bg-base-200/70 border border-base-300 py-2.5 px-3 rounded-lg font-mono text-[11px] font-semibold text-base-content shadow-xs whitespace-nowrap overflow-x-auto text-center block">
           min F(p) = w<sub>t</sub>·[T(p)/T<sub>ref</sub>] + w<sub>d</sub>·[D(p)/D<sub>ref</sub>] + w<sub>c</sub>·[C(p)/C<sub>ref</sub>]
         </div>
         <div className="text-[11px] text-base-content/70 flex flex-col gap-1">
@@ -38,10 +38,19 @@ export default function FormulationTab({ graphMetrics }) {
         <div className="text-[10px] font-bold text-base-content/70 uppercase tracking-wider">
           Road Network Constraints
         </div>
-        <div className="card bg-base-200/50 border border-base-300 p-2 font-mono text-[10px] text-base-content space-y-1">
-          <div>1. p = (v<sub>0</sub>, v<sub>1</sub>, …, v<sub>n</sub>) with v<sub>0</sub> = src, v<sub>n</sub> = dst</div>
-          <div>2. (v<sub>i</sub>, v<sub>i+1</sub>) ∈ E(G) &nbsp; ∀ i ∈ &#123;0, …, n-1&#125;</div>
-          <div>3. e<sub>k</sub> ∉ Closed(E) &nbsp; (Strict avoidance of closures)</div>
+        <div className="w-full bg-base-200/50 border border-base-300 p-2.5 rounded-lg font-mono text-[10.5px] text-base-content flex flex-col gap-2 overflow-x-auto">
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="badge badge-neutral badge-xs font-bold font-mono px-1">1</span>
+            <span>p = (v<sub>0</sub>, v<sub>1</sub>, …, v<sub>n</sub>) &nbsp; [v<sub>0</sub>=src, v<sub>n</sub>=dst]</span>
+          </div>
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="badge badge-neutral badge-xs font-bold font-mono px-1">2</span>
+            <span>(v<sub>i</sub>, v<sub>i+1</sub>) ∈ E(G) &nbsp; ∀ i ∈ &#123;0, …, n-1&#125;</span>
+          </div>
+          <div className="flex items-center gap-2 whitespace-nowrap">
+            <span className="badge badge-error badge-xs font-bold font-mono px-1">3</span>
+            <span>e<sub>k</sub> ∉ Closed(E) &nbsp; (No closed edges)</span>
+          </div>
         </div>
       </div>
 
@@ -52,7 +61,7 @@ export default function FormulationTab({ graphMetrics }) {
             <Network className="w-3.5 h-3.5" />
             <span>OpenStreetMap & NetworkX Properties</span>
           </div>
-          <span className="badge badge-primary badge-outline badge-xs">Connected</span>
+          <span className="badge badge-primary badge-outline badge-xs px-2.5 py-1 font-semibold">Connected</span>
         </div>
         <div className="divide-y divide-base-200 border border-base-200 rounded-lg overflow-hidden">
           {metricsRows.map((row, i) => (

@@ -90,9 +90,6 @@ export default function IntelligenceTab({ routeResult }) {
           <span className="text-[10px] font-bold text-base-content/70 uppercase tracking-wider truncate">
             Convergence Trajectory
           </span>
-          <span className="badge badge-primary badge-outline badge-xs font-semibold whitespace-nowrap flex-shrink-0">
-            Real-Time
-          </span>
         </div>
         <div className="h-44 w-full">
           <canvas ref={canvasRef} />
@@ -135,8 +132,8 @@ export default function IntelligenceTab({ routeResult }) {
         <div className="text-[10px] font-bold uppercase tracking-wider text-primary">
           Quantum Delta Potential Well Wave Function Update
         </div>
-        <div className="card bg-base-100 p-2.5 rounded-lg border border-primary/20 font-mono text-[11px] text-base-content shadow-2xs whitespace-nowrap overflow-x-auto text-center">
-          x<sub>i</sub>(t+1) = p<sub>i</sub> ± β · |mbest − x<sub>i</sub>| · ln(1/u)
+        <div className="w-full bg-base-100 py-2.5 px-3 rounded-lg border border-primary/20 font-mono text-[12px] font-semibold text-base-content shadow-xs whitespace-nowrap overflow-x-auto text-center block">
+          x<sub>i</sub>(t+1) = p<sub>i</sub> ± β · |m<sub>best</sub> − x<sub>i</sub>| · ln(1/u)
         </div>
         <div className="text-[10px] text-base-content/70 leading-relaxed">
           Where β is the quantum contraction coefficient linearly decaying from 1.0 to 0.4, and u ~ Uniform(0,1) sampled via SciPy stats.

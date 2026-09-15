@@ -62,7 +62,7 @@ export default function HistoryTab() {
       <div className="flex flex-col gap-1.5">
         <div className="flex items-center justify-between text-[10px] font-bold text-base-content/60 uppercase tracking-wider px-0.5">
           <span>Recent SQLite Logs</span>
-          <span className="badge badge-ghost badge-xs">{history.length} records</span>
+          <span className="badge badge-ghost badge-xs px-2.5 py-1 font-medium">{history.length} records</span>
         </div>
         <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto pr-0.5">
           {history.length === 0 ? (
@@ -70,11 +70,11 @@ export default function HistoryTab() {
           ) : (
             history.map((h) => (
               <div key={h.id} className="card bg-base-100 border border-base-300 rounded-lg p-2.5 flex flex-col gap-1 shadow-2xs hover:border-primary/40 transition">
-                <div className="flex items-center justify-between gap-1">
+                <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-base-content text-[11px] truncate capitalize flex-1 min-w-0">
                     {h.source_id.replace(/_/g, ' ')} → {h.destination_id.replace(/_/g, ' ')}
                   </span>
-                  <span className="badge badge-primary badge-outline badge-xs font-semibold flex-shrink-0">
+                  <span className="badge badge-primary badge-outline badge-xs font-semibold px-2.5 py-1 tracking-wider flex-shrink-0">
                     {h.algorithm}
                   </span>
                 </div>

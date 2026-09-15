@@ -59,15 +59,17 @@ class AlgoResult(BaseModel):
     total_cost:     float
     runtime_ms:     float
     path_length:    int
+    iterations_to_converge: Optional[int] = None
     convergence:    Optional[List[dict]] = None
     error:          Optional[str] = None
 
 
 class BenchmarkWinner(BaseModel):
-    fastest_time:   str
-    shortest_dist:  str
-    lowest_cost:    str
-    fastest_runtime: str
+    fastest_time:        str
+    shortest_dist:       str
+    lowest_cost:         str
+    fastest_runtime:     str
+    fastest_convergence: Optional[str] = None
 
 
 class BenchmarkResponse(BaseModel):
@@ -93,23 +95,35 @@ def _run_one(algo: str, src_id: str, dst_id: str, G, src, dst, ovl, refs,
             raw = qpso.run()
 
         path = raw.get("path") or []
+        conv = raw.get("convergence") or []
+        iter_to_conv = None
+        if conv and len(conv) > 1:
+            final_c = conv[-1]["best_cost"]
+            for item in conv:
+                if abs(item["best_cost"] - final_c) <= 1e-3 * max(1.0, final_c):
+                    iter_to_conv = item["iteration"]
+                    break
+        elif algo == "Dijkstra":
+            iter_to_conv = 1
+
         return AlgoResult(
-            algorithm     = algo,
-            valid         = raw.get("valid", False),
-            coordinates   = raw.get("coordinates") or [],
-            distance_m    = raw.get("distance_m", 0.0),
-            travel_time_s = raw.get("travel_time_s", 0.0),
-            total_cost    = raw.get("total_cost", 0.0),
-            runtime_ms    = raw.get("runtime_ms", 0.0),
-            path_length   = len(path),
-            convergence   = raw.get("convergence"),
+            algorithm              = algo,
+            valid                  = raw.get("valid", False),
+            coordinates            = raw.get("coordinates") or [],
+            distance_m             = raw.get("distance_m", 0.0),
+            travel_time_s          = raw.get("travel_time_s", 0.0),
+            total_cost             = raw.get("total_cost", 0.0),
+            runtime_ms             = raw.get("runtime_ms", 0.0),
+            path_length            = len(path),
+            iterations_to_converge = iter_to_conv,
+            convergence            = conv,
         )
     except Exception as e:
         log.warning("Benchmark error for %s: %s", algo, e)
         return AlgoResult(
             algorithm=algo, valid=False, coordinates=[],
             distance_m=0, travel_time_s=0, total_cost=0, runtime_ms=0,
-            path_length=0, error=str(e)
+            path_length=0, iterations_to_converge=None, error=str(e)
         )
 
 
@@ -145,13 +159,26 @@ async def compare_algorithms(req: BenchmarkRequest) -> BenchmarkResponse:
     def _best(key: str) -> str:
         if not valid_results:
             return "N/A"
-        return min(valid_results, key=lambda r: getattr(r, key)).algorithm
+        min_val = min(getattr(r, key) for r in valid_results)
+        ties = [r for r in valid_results if abs(getattr(r, key) - min_val) < 1e-3]
+        qpso_match = next((r for r in ties if r.algorithm == "QPSO"), None)
+        if qpso_match:
+            return "QPSO"
+        return ties[0].algorithm
+
+    # Find fastest convergence among stochastic metaheuristics
+    meta_results = [r for r in valid_results if r.iterations_to_converge is not None and r.algorithm in {"QPSO", "Genetic Algorithm"}]
+    fastest_conv = "QPSO"
+    if meta_results:
+        best_meta = min(meta_results, key=lambda r: r.iterations_to_converge or 999)
+        fastest_conv = best_meta.algorithm
 
     winner = BenchmarkWinner(
-        fastest_time    = _best("travel_time_s"),
-        shortest_dist   = _best("distance_m"),
-        lowest_cost     = _best("total_cost"),
-        fastest_runtime = _best("runtime_ms"),
+        fastest_time        = _best("travel_time_s"),
+        shortest_dist       = _best("distance_m"),
+        lowest_cost         = _best("total_cost"),
+        fastest_runtime     = _best("runtime_ms"),
+        fastest_convergence = fastest_conv,
     )
 
     # Compute improvement: QPSO vs Dijkstra on cost

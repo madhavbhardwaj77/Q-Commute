@@ -49,7 +49,7 @@ import math
 import random
 import time
 from collections import Counter
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import networkx as nx
 import numpy as np
@@ -61,6 +61,9 @@ from backend.config import (
 )
 from backend.graph.snapper import path_coords
 from backend.optimization.fitness import path_fitness, edge_cost
+
+if TYPE_CHECKING:
+    from backend.optimization.vrp_models import VRPInstance, VRPSolution
 
 log = logging.getLogger(__name__)
 
@@ -619,3 +622,383 @@ class QPSORouter:
             "valid":           False,
             "error":           msg,
         }
+
+
+# ---------------------------------------------------------------------------
+# Multi-Vehicle VRP QPSO Solver
+# ---------------------------------------------------------------------------
+
+class _VRPSplitMarker:
+    """Split delimiter representing vehicle boundary in a giant-tour chromosome."""
+    def __init__(self, idx: int):
+        self.idx = idx
+
+    def __repr__(self) -> str:
+        return f"<SplitMarker_{self.idx}>"
+
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, _VRPSplitMarker) and self.idx == other.idx
+
+    def __hash__(self) -> int:
+        return hash(("VRPSplitMarker", self.idx))
+
+
+def _decode_vrp_chromosome(
+    chromosome: List[Any],
+    vehicle_ids: List[Any],
+) -> Dict[Any, List[Any]]:
+    """Decode chromosome containing stop IDs and split markers into vehicle routes."""
+    routes: Dict[Any, List[Any]] = {v_id: [] for v_id in vehicle_ids}
+    if not vehicle_ids:
+        return routes
+    v_idx = 0
+    num_vehicles = len(vehicle_ids)
+    for gene in chromosome:
+        if isinstance(gene, _VRPSplitMarker):
+            v_idx = min(v_idx + 1, num_vehicles - 1)
+        else:
+            routes[vehicle_ids[v_idx]].append(gene)
+    return routes
+
+
+def _encode_vrp_chromosome(
+    routes: Dict[Any, List[Any]],
+    vehicle_ids: List[Any],
+) -> List[Any]:
+    """Encode vehicle routes into a giant tour with split markers."""
+    chromosome = []
+    for i, v_id in enumerate(vehicle_ids):
+        if i > 0:
+            chromosome.append(_VRPSplitMarker(i))
+        chromosome.extend(routes.get(v_id, []))
+    return chromosome
+
+
+def _vrp_order_crossover(
+    parent_a: List[Any],
+    parent_b: List[Any],
+    rng: np.random.Generator,
+) -> List[Any]:
+    """
+    Order Crossover (OX) for giant-tour permutation encoding.
+    Preserves all stop IDs and split markers with no duplicates.
+    """
+    n = len(parent_a)
+    if n <= 1:
+        return list(parent_a)
+    idx1, idx2 = sorted(rng.choice(n, size=2, replace=False))
+    slice_a = parent_a[idx1 : idx2 + 1]
+    slice_set = set(slice_a)
+
+    child = [None] * n
+    child[idx1 : idx2 + 1] = slice_a
+
+    b_ordered = parent_b[idx2 + 1 :] + parent_b[: idx2 + 1]
+    b_remaining = [item for item in b_ordered if item not in slice_set]
+
+    fill_positions = list(range(idx2 + 1, n)) + list(range(0, idx1))
+    for pos, item in zip(fill_positions, b_remaining):
+        child[pos] = item
+
+    return child
+
+
+def _vrp_mutate(
+    chromosome: List[Any],
+    rng: np.random.Generator,
+    mutation_rate: float = 0.3,
+) -> List[Any]:
+    """Apply swap or 2-opt segment inversion to chromosome."""
+    if len(chromosome) < 2 or rng.random() > mutation_rate:
+        return list(chromosome)
+    chrom = list(chromosome)
+    i, j = sorted(rng.choice(len(chrom), size=2, replace=False))
+    if rng.random() < 0.5:
+        chrom[i], chrom[j] = chrom[j], chrom[i]
+    else:
+        chrom[i : j + 1] = list(reversed(chrom[i : j + 1]))
+    return chrom
+
+
+def _vrp_mbest(
+    pbests: List[List[Any]],
+) -> List[Any]:
+    """
+    Compute mean-best chromosome approximation.
+    Finds the pbest chromosome with highest average similarity to all other pbests.
+    """
+    if len(pbests) <= 1:
+        return list(pbests[0]) if pbests else []
+
+    pair_sets = [
+        set(zip(p[:-1], p[1:])) for p in pbests
+    ]
+    best_idx = 0
+    best_score = -1.0
+    for i, s_i in enumerate(pair_sets):
+        score = sum(
+            len(s_i & s_j) for j, s_j in enumerate(pair_sets) if i != j
+        )
+        if score > best_score:
+            best_score = score
+            best_idx = i
+
+    return list(pbests[best_idx])
+
+
+def _nearest_neighbor_vrp(
+    instance: Any,
+) -> Dict[Any, List[Any]]:
+    """
+    Greedy nearest-neighbor heuristic that respects vehicle capacity.
+    Used for seeding initial swarm and for baseline benchmark comparison.
+    """
+    customer_stops = [s.id for s in instance.stops if s.id != instance.depot_id]
+    vehicle_ids = [v.id for v in instance.vehicles]
+    if not customer_stops:
+        return {v_id: [] for v_id in vehicle_ids}
+    if not vehicle_ids:
+        return {}
+
+    routes: Dict[Any, List[Any]] = {v_id: [] for v_id in vehicle_ids}
+    unassigned = list(customer_stops)
+
+    for v_id in vehicle_ids:
+        vehicle = instance.get_vehicle(v_id)
+        cap = vehicle.capacity if vehicle else float("inf")
+        curr_load = 0.0
+        curr_stop = (vehicle.start_depot_id if vehicle else None) or instance.depot_id
+
+        while unassigned:
+            best_stop = None
+            best_dist = float("inf")
+            for cid in unassigned:
+                d = instance.get_distance(curr_stop, cid)
+                if d < best_dist:
+                    best_dist = d
+                    best_stop = cid
+
+            if best_stop is None:
+                break
+
+            stop_obj = instance.get_stop(best_stop)
+            stop_demand = stop_obj.demand if stop_obj else 0.0
+
+            if curr_load + stop_demand <= cap or len(routes[v_id]) == 0:
+                routes[v_id].append(best_stop)
+                curr_load += stop_demand
+                unassigned.remove(best_stop)
+                curr_stop = best_stop
+            else:
+                break
+
+    if unassigned:
+        for idx, cid in enumerate(unassigned):
+            v_id = vehicle_ids[idx % len(vehicle_ids)]
+            routes[v_id].append(cid)
+
+    return routes
+
+
+def solve_vrp_qpso(
+    instance: Any,
+    weights: Optional[Dict[str, float]] = None,
+    iterations: Optional[int] = None,
+    swarm_size: Optional[int] = None,
+    seed: Optional[int] = None,
+    initial_solution: Optional[Any] = None,
+    callback: Optional[Callable[[int, float], None]] = None,
+) -> Any:
+    """
+    Solve a multi-vehicle VRP instance using Quantum Particle Swarm Optimization.
+
+    Encodes solutions as giant-tour permutations with vehicle split markers.
+    Uses discrete quantum contraction towards local attractor (pbest-gbest crossover),
+    expansion in neighborhood of mbest, and quantum tunnelling.
+    Supports warm-start seeding via initial_solution and per-iteration progress callback.
+
+    Args:
+        instance: VRPInstance defining stops, vehicles, and depot.
+        weights: Objective weights for time, distance, congestion.
+        iterations: Number of optimization iterations.
+        swarm_size: Number of particles in the swarm.
+        seed: Random seed for reproducibility.
+        initial_solution: Optional prior VRPSolution or routes dict to seed the swarm.
+        callback: Optional callable invoked after each iteration as callback(iteration, best_fitness).
+
+    Returns:
+        VRPSolution with best routes, fitness, violations, and convergence curve.
+    """
+    from backend.optimization.fitness import vrp_fitness
+    from backend.optimization.vrp_models import VRPSolution
+
+    n_iter = iterations if iterations is not None and iterations > 0 else QPSO_ITERATIONS
+    n_particles = swarm_size if swarm_size is not None and swarm_size > 0 else QPSO_POPULATION
+    rng = np.random.default_rng(seed if seed is not None else QPSO_RANDOM_SEED)
+
+    customer_stops = [s.id for s in instance.stops if s.id != instance.depot_id]
+    vehicle_ids = [v.id for v in instance.vehicles]
+
+    if not customer_stops:
+        empty_sol = VRPSolution(routes={v: [] for v in vehicle_ids})
+        fitness, violations = vrp_fitness(empty_sol, instance, weights)
+        empty_sol.fitness = fitness
+        empty_sol.violations = violations
+        return empty_sol
+
+    if not vehicle_ids:
+        return VRPSolution()
+
+    num_vehicles = len(vehicle_ids)
+    base_delims = [_VRPSplitMarker(i) for i in range(1, num_vehicles)]
+    all_genes = customer_stops + base_delims
+
+    particles: List[List[Any]] = []
+
+    # Check for warm-start seeding
+    has_valid_init = False
+    if initial_solution is not None:
+        try:
+            init_routes_raw = (
+                initial_solution.routes
+                if hasattr(initial_solution, "routes")
+                else initial_solution
+            )
+            if isinstance(init_routes_raw, dict):
+                init_routes = {v: list(init_routes_raw.get(v, [])) for v in vehicle_ids}
+                assigned_stops = set()
+                for v_stops in init_routes.values():
+                    assigned_stops.update(v_stops)
+                missing = [s for s in customer_stops if s not in assigned_stops]
+                if missing:
+                    for idx, m_id in enumerate(missing):
+                        init_routes[vehicle_ids[idx % num_vehicles]].append(m_id)
+                particles.append(_encode_vrp_chromosome(init_routes, vehicle_ids))
+                has_valid_init = True
+        except Exception as e:
+            log.warning("Could not warm-start from initial_solution: %s", e)
+
+    # Particle 0 (or fallback if no warm-start): Nearest-neighbor heuristic
+    if not has_valid_init:
+        nn_routes = _nearest_neighbor_vrp(instance)
+        particles.append(_encode_vrp_chromosome(nn_routes, vehicle_ids))
+
+    # Particle 1: If warm started, mutated variant of warm start; else balanced partition
+    if n_particles > 1:
+        if has_valid_init:
+            mutated_init = _vrp_mutate(list(particles[0]), rng, mutation_rate=0.5)
+            particles.append(mutated_init)
+        else:
+            shuffled = list(customer_stops)
+            rng.shuffle(shuffled)
+            balanced_routes: Dict[Any, List[Any]] = {v: [] for v in vehicle_ids}
+            for idx, cid in enumerate(shuffled):
+                balanced_routes[vehicle_ids[idx % num_vehicles]].append(cid)
+            particles.append(_encode_vrp_chromosome(balanced_routes, vehicle_ids))
+
+    # Remaining particles: Random permutations
+    while len(particles) < n_particles:
+        p = list(all_genes)
+        rng.shuffle(p)
+        particles.append(p)
+
+    pbest_chromosomes: List[List[Any]] = [list(p) for p in particles]
+    pbest_solutions: List[VRPSolution] = []
+    pbest_fitnesses: List[float] = []
+
+    for p in particles:
+        routes = _decode_vrp_chromosome(p, vehicle_ids)
+        sol = VRPSolution(routes=routes)
+        fit, violations = vrp_fitness(sol, instance, weights)
+        sol.fitness = fit
+        sol.violations = violations
+        pbest_solutions.append(sol)
+        pbest_fitnesses.append(fit)
+
+    gbest_idx = int(np.argmin(pbest_fitnesses))
+    gbest_chromosome = list(pbest_chromosomes[gbest_idx])
+    gbest_fitness = pbest_fitnesses[gbest_idx]
+    gbest_solution = pbest_solutions[gbest_idx]
+
+    convergence: List[Dict[str, Any]] = [
+        {"iteration": 0, "best_cost": round(gbest_fitness, 6)}
+    ]
+    if callback is not None:
+        try:
+            callback(0, float(gbest_fitness))
+        except Exception as e:
+            log.warning("Callback error at iter 0: %s", e)
+
+    for it in range(1, n_iter + 1):
+        beta = QPSO_BETA_MAX - (QPSO_BETA_MAX - QPSO_BETA_MIN) * it / n_iter
+        mbest = _vrp_mbest(pbest_chromosomes)
+
+        for i in range(len(pbest_chromosomes)):
+            if rng.random() < QPSO_TUNNEL_PROB:
+                candidate = list(all_genes)
+                rng.shuffle(candidate)
+            else:
+                attractor = _vrp_order_crossover(
+                    pbest_chromosomes[i], gbest_chromosome, rng
+                )
+
+                if rng.random() > beta:
+                    candidate = attractor
+                    if rng.random() < 0.5:
+                        candidate = _vrp_mutate(candidate, rng, mutation_rate=0.4)
+                else:
+                    candidate = _vrp_order_crossover(attractor, mbest, rng)
+                    if rng.random() < 0.3:
+                        candidate = _vrp_mutate(candidate, rng, mutation_rate=0.5)
+
+            cand_routes = _decode_vrp_chromosome(candidate, vehicle_ids)
+            cand_sol = VRPSolution(routes=cand_routes)
+            cand_fit, cand_violations = vrp_fitness(cand_sol, instance, weights)
+            cand_sol.fitness = cand_fit
+            cand_sol.violations = cand_violations
+
+            if cand_fit < pbest_fitnesses[i]:
+                pbest_fitnesses[i] = cand_fit
+                pbest_chromosomes[i] = list(candidate)
+                pbest_solutions[i] = cand_sol
+
+                if cand_fit < gbest_fitness:
+                    gbest_fitness = cand_fit
+                    gbest_chromosome = list(candidate)
+                    gbest_solution = cand_sol
+
+        convergence.append({"iteration": it, "best_cost": round(gbest_fitness, 6)})
+        if callback is not None:
+            try:
+                callback(it, float(gbest_fitness))
+            except Exception as e:
+                log.warning("Callback error at iter %d: %s", it, e)
+
+    gbest_solution.fitness = gbest_fitness
+    gbest_solution.convergence = convergence
+    return gbest_solution
+
+
+def solve_vrp_qpso_warm_start(
+    instance: Any,
+    previous_solution: Optional[Any] = None,
+    weights: Optional[Dict[str, float]] = None,
+    iterations: int = 15,
+    swarm_size: int = 20,
+    seed: Optional[int] = None,
+    callback: Optional[Callable[[int, float], None]] = None,
+) -> Any:
+    """
+    Solve VRP instance using warm-start QPSO seeded with a previous solution.
+    Runs fewer iterations (default 15) for fast response during live rerouting.
+    """
+    return solve_vrp_qpso(
+        instance=instance,
+        weights=weights,
+        iterations=iterations,
+        swarm_size=swarm_size,
+        seed=seed,
+        initial_solution=previous_solution,
+        callback=callback,
+    )
+

@@ -1,0 +1,11 @@
+id,name,lat,lon,demand,time_window_start,time_window_end,service_time
+depot,Central Depot,40.0,50.0,0,0,1100,0
+rc1,Mixed Cluster 1,25.0,85.0,20,50,450,75
+rc2,Mixed Cluster 2,22.0,75.0,10,70,480,75
+rc3,Mixed Cluster 3,22.0,85.0,15,90,520,75
+rc4,Random Outlier 1,55.0,20.0,10,120,580,75
+rc5,Random Outlier 2,15.0,30.0,20,150,620,75
+rc6,Mixed Cluster 4,20.0,80.0,10,180,680,75
+rc7,Random Outlier 3,45.0,25.0,15,200,720,75
+rc8,Mixed Cluster 5,20.0,85.0,10,220,760,75
+rc9,Random Outlier 4,50.0,52.0,10,240,800,75

@@ -1,0 +1,11 @@
+id,name,lat,lon,demand,time_window_start,time_window_end,service_time
+depot,Central Depot,40.0,50.0,0,0,1236,0
+c1,Cluster A1,45.0,68.0,10,50,400,90
+c2,Cluster A2,45.0,70.0,30,80,450,90
+c3,Cluster A3,42.0,66.0,10,100,500,90
+c4,Cluster A4,42.0,68.0,20,120,550,90
+c5,Cluster B1,25.0,85.0,10,150,600,90
+c6,Cluster B2,22.0,85.0,20,180,650,90
+c7,Cluster B3,22.0,80.0,20,200,700,90
+c8,Cluster B4,20.0,80.0,10,220,750,90
+c9,Cluster B5,20.0,85.0,10,250,800,90

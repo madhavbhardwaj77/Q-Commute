@@ -14,11 +14,15 @@ any single term from dominating simply because of its measurement units.
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 import networkx as nx
 
 from backend.config import WEIGHT_TIME, WEIGHT_DISTANCE, WEIGHT_CONGESTION
+from backend.optimization.constraints import check_all_constraints
+
+if TYPE_CHECKING:
+    from backend.optimization.vrp_models import VRPInstance, VRPSolution
 
 
 def edge_cost(
@@ -150,3 +154,87 @@ def make_cost_fn(
         return edge_cost(None, u, v, 0, data, traffic_overlay, refs)
 
     return cost_fn
+
+
+def vrp_fitness(
+    solution: Any,
+    instance: Any,
+    weights: Optional[Dict[str, float]] = None,
+) -> Tuple[float, List[str]]:
+    """
+    Compute fitness for a VRP solution using a weighted sum of travel time,
+    distance, and congestion, heavily penalising any constraint violations.
+
+    Cost = WT * (total_time / T_ref)
+         + WD * (total_distance / D_ref)
+         + WC * (total_congestion / C_ref)
+         + sum(penalties for constraint violations)
+
+    Args:
+        solution: VRPSolution instance or mapping.
+        instance: VRPInstance problem definition.
+        weights: Dictionary of weights with keys "time", "distance", "congestion",
+                 and optional normalisation refs "T_ref", "D_ref", "C_ref",
+                 and "penalty_multiplier".
+
+    Returns:
+        Tuple of (fitness_score, violations_list). Lower fitness is better.
+    """
+    if weights is None:
+        weights = {}
+
+    wt = float(weights.get("time", WEIGHT_TIME))
+    wd = float(weights.get("distance", WEIGHT_DISTANCE))
+    wc = float(weights.get("congestion", WEIGHT_CONGESTION))
+
+    t_ref = float(weights.get("T_ref", 1.0))
+    d_ref = float(weights.get("D_ref", 1.0))
+    c_ref = float(weights.get("C_ref", 1.0))
+
+    total_time = float(getattr(solution, "total_time", 0.0))
+    total_distance = float(getattr(solution, "total_distance", 0.0))
+    total_congestion = float(getattr(solution, "total_congestion", 0.0))
+
+    routes = getattr(solution, "routes", None)
+    if routes is None and isinstance(solution, dict):
+        routes = solution
+
+    if total_time == 0.0 and total_distance == 0.0 and routes:
+        calc_dist = 0.0
+        calc_time = 0.0
+        for vehicle_id, stop_ids in routes.items():
+            vehicle = instance.get_vehicle(vehicle_id) if hasattr(instance, "get_vehicle") else None
+            speed = getattr(vehicle, "speed", None)
+            depot_id = (vehicle.start_depot_id if vehicle else None) or getattr(instance, "depot_id", None)
+            prev = depot_id
+            for stop_id in stop_ids:
+                if prev is not None and prev != stop_id:
+                    calc_dist += instance.get_distance(prev, stop_id)
+                    calc_time += instance.get_travel_time(prev, stop_id, speed=speed)
+                prev = stop_id
+            if stop_ids and depot_id is not None and prev != depot_id:
+                calc_dist += instance.get_distance(prev, depot_id)
+                calc_time += instance.get_travel_time(prev, depot_id, speed=speed)
+        total_distance = calc_dist
+        total_time = calc_time
+        if hasattr(solution, "total_distance"):
+            solution.total_distance = total_distance
+        if hasattr(solution, "total_time"):
+            solution.total_time = total_time
+
+    base_cost = (
+        wt * (total_time / t_ref)
+        + wd * (total_distance / d_ref)
+        + wc * (total_congestion / c_ref)
+    )
+
+    violations = check_all_constraints(solution, instance, weights)
+    if hasattr(solution, "violations"):
+        solution.violations = list(violations)
+
+    penalty_multiplier = float(weights.get("penalty_multiplier", 1000.0))
+    unit_penalty = max(penalty_multiplier, 10.0 * float(base_cost))
+    penalty = len(violations) * unit_penalty
+
+    fitness_score = float(base_cost + penalty)
+    return fitness_score, violations

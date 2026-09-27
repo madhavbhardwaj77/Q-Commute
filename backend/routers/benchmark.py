@@ -8,14 +8,19 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, field_validator
 
 from backend.graph.state import graph_state
+from backend.optimization.benchmark_data import get_available_datasets, load_benchmark_instance
 from backend.optimization.dijkstra import run_dijkstra
-from backend.optimization.qpso import QPSORouter
+from backend.optimization.exact_solver import EXACT_SOLVER_MAX_STOPS, solve_vrp_exact
+from backend.optimization.genetic import solve_vrp_ga
+from backend.optimization.qpso import QPSORouter, solve_vrp_qpso
+from backend.optimization.vrp_models import Stop, Vehicle, VRPInstance, VRPSolution
+from backend.routers.fleet import StopInput, VehicleInput
 from backend.config import LOCATION_MAP
 
 log = logging.getLogger(__name__)
@@ -211,3 +216,263 @@ async def compare_algorithms(req: BenchmarkRequest) -> BenchmarkResponse:
         log.warning("Could not persist benchmark: %s", e)
 
     return resp
+
+
+class VRPBenchmarkRequest(BaseModel):
+    dataset_id: Optional[str] = None
+    stops: Optional[List[StopInput]] = None
+    vehicles: Optional[List[VehicleInput]] = None
+    depot_id: Optional[str] = None
+    algorithms: List[str] = ["QPSO", "GA", "OR-Tools (Exact)"]
+    num_vehicles: Optional[int] = None
+    capacity: Optional[float] = None
+    iterations: int = 30
+    population: int = 20
+    time_limit_seconds: int = 5
+
+
+class VRPAlgoResult(BaseModel):
+    algorithm: str
+    status: str = "completed"
+    routes: Dict[str, List[Any]] = {}
+    fitness: float = 0.0
+    total_distance: float = 0.0
+    total_time: float = 0.0
+    violations: List[str] = []
+    runtime_ms: float = 0.0
+    convergence: Optional[List[dict]] = None
+    message: Optional[str] = None
+
+
+class VRPBenchmarkWinner(BaseModel):
+    lowest_cost: Optional[str] = None
+    shortest_distance: Optional[str] = None
+    fastest_time: Optional[str] = None
+    fastest_runtime: Optional[str] = None
+
+
+class VRPBenchmarkResponse(BaseModel):
+    dataset_id: Optional[str] = None
+    instance_name: str
+    num_stops: int
+    num_vehicles: int
+    results: List[VRPAlgoResult]
+    winner: VRPBenchmarkWinner
+    comparison_summary: Dict[str, Any] = {}
+
+
+@router.get("/vrp_datasets")
+async def list_vrp_datasets() -> List[Dict[str, Any]]:
+    """Return catalog of available standard benchmark datasets for VRP evaluation."""
+    return get_available_datasets()
+
+
+@router.post("/vrp_compare", response_model=VRPBenchmarkResponse)
+async def compare_vrp_algorithms(req: VRPBenchmarkRequest) -> VRPBenchmarkResponse:
+    """
+    Compare QPSO, GA, and OR-Tools exact solver on standard VRP benchmarks or custom instances.
+    """
+    dataset_id = req.dataset_id
+    if not dataset_id and not (req.stops and req.vehicles and req.depot_id):
+        dataset_id = "c101_small"
+
+    if dataset_id:
+        try:
+            instance = load_benchmark_instance(
+                dataset_id,
+                num_vehicles=req.num_vehicles,
+                capacity=req.capacity,
+            )
+            instance_name = f"Benchmark {dataset_id.upper()}"
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    elif req.stops and req.vehicles and req.depot_id:
+        domain_stops = [
+            Stop(
+                id=s.id,
+                lat=s.lat,
+                lon=s.lon,
+                demand=s.demand,
+                time_window_start=s.time_window_start,
+                time_window_end=s.time_window_end,
+                service_time=s.service_time,
+            )
+            for s in req.stops
+        ]
+        domain_vehicles = [
+            Vehicle(
+                id=v.id,
+                capacity=v.capacity,
+                start_depot_id=v.start_depot_id or req.depot_id,
+                max_route_duration=v.max_route_duration,
+                speed=v.speed,
+            )
+            for v in req.vehicles
+        ]
+        instance = VRPInstance(
+            stops=domain_stops,
+            vehicles=domain_vehicles,
+            depot_id=req.depot_id,
+        )
+        instance_name = "Custom VRP Instance"
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Must provide either dataset_id or (stops, vehicles, depot_id)",
+        )
+
+    results: List[VRPAlgoResult] = []
+    algo_set = set(req.algorithms)
+
+    # 1. QPSO
+    if any(a.upper() in {"QPSO", "QPSO-VRP"} for a in algo_set):
+        t0 = time.perf_counter()
+        try:
+            qpso_sol = solve_vrp_qpso(
+                instance,
+                swarm_size=req.population,
+                iterations=req.iterations,
+            )
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            results.append(
+                VRPAlgoResult(
+                    algorithm="QPSO",
+                    status="completed",
+                    routes={str(k): list(v) for k, v in qpso_sol.routes.items()},
+                    fitness=round(qpso_sol.fitness, 4),
+                    total_distance=round(qpso_sol.total_distance, 4),
+                    total_time=round(qpso_sol.total_time, 4),
+                    violations=list(qpso_sol.violations),
+                    runtime_ms=round(elapsed_ms, 2),
+                    convergence=qpso_sol.convergence,
+                )
+            )
+        except Exception as e:
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            results.append(
+                VRPAlgoResult(
+                    algorithm="QPSO",
+                    status="error",
+                    runtime_ms=round(elapsed_ms, 2),
+                    message=str(e),
+                )
+            )
+
+    # 2. GA
+    if any(a.upper() in {"GA", "GENETIC", "GENETIC ALGORITHM", "GA-VRP"} for a in algo_set):
+        t0 = time.perf_counter()
+        try:
+            ga_sol = solve_vrp_ga(
+                instance,
+                population_size=req.population,
+                generations=req.iterations,
+            )
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            results.append(
+                VRPAlgoResult(
+                    algorithm="Genetic Algorithm",
+                    status="completed",
+                    routes={str(k): list(v) for k, v in ga_sol.routes.items()},
+                    fitness=round(ga_sol.fitness, 4),
+                    total_distance=round(ga_sol.total_distance, 4),
+                    total_time=round(ga_sol.total_time, 4),
+                    violations=list(ga_sol.violations),
+                    runtime_ms=round(elapsed_ms, 2),
+                    convergence=ga_sol.convergence,
+                )
+            )
+        except Exception as e:
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            results.append(
+                VRPAlgoResult(
+                    algorithm="Genetic Algorithm",
+                    status="error",
+                    runtime_ms=round(elapsed_ms, 2),
+                    message=str(e),
+                )
+            )
+
+    # 3. Exact Solver (OR-Tools)
+    if any("EXACT" in a.upper() or "OR-TOOLS" in a.upper() or "ORTOOLS" in a.upper() for a in algo_set):
+        if len(instance.stops) > EXACT_SOLVER_MAX_STOPS:
+            results.append(
+                VRPAlgoResult(
+                    algorithm="OR-Tools (Exact)",
+                    status="skipped",
+                    message=f"Instance size ({len(instance.stops)} stops) exceeds safe limit of {EXACT_SOLVER_MAX_STOPS} stops.",
+                )
+            )
+        else:
+            t0 = time.perf_counter()
+            try:
+                exact_sol = solve_vrp_exact(
+                    instance,
+                    time_limit_seconds=req.time_limit_seconds,
+                )
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                results.append(
+                    VRPAlgoResult(
+                        algorithm="OR-Tools (Exact)",
+                        status="completed",
+                        routes={str(k): list(v) for k, v in exact_sol.routes.items()},
+                        fitness=round(exact_sol.fitness, 4),
+                        total_distance=round(exact_sol.total_distance, 4),
+                        total_time=round(exact_sol.total_time, 4),
+                        violations=list(exact_sol.violations),
+                        runtime_ms=round(elapsed_ms, 2),
+                        convergence=exact_sol.convergence,
+                    )
+                )
+            except Exception as e:
+                elapsed_ms = (time.perf_counter() - t0) * 1000
+                results.append(
+                    VRPAlgoResult(
+                        algorithm="OR-Tools (Exact)",
+                        status="error",
+                        runtime_ms=round(elapsed_ms, 2),
+                        message=str(e),
+                    )
+                )
+
+    completed = [r for r in results if r.status == "completed"]
+    lowest_cost = None
+    shortest_dist = None
+    fastest_time = None
+    fastest_runtime = None
+
+    if completed:
+        lowest_cost = min(completed, key=lambda r: r.fitness).algorithm
+        shortest_dist = min(completed, key=lambda r: r.total_distance).algorithm
+        fastest_time = min(completed, key=lambda r: r.total_time).algorithm
+        fastest_runtime = min(completed, key=lambda r: r.runtime_ms).algorithm
+
+    winner = VRPBenchmarkWinner(
+        lowest_cost=lowest_cost,
+        shortest_distance=shortest_dist,
+        fastest_time=fastest_time,
+        fastest_runtime=fastest_runtime,
+    )
+
+    comparison_summary: Dict[str, Any] = {}
+    qpso_res = next((r for r in completed if r.algorithm == "QPSO"), None)
+    ga_res = next((r for r in completed if r.algorithm == "Genetic Algorithm"), None)
+    exact_res = next((r for r in completed if "OR-Tools" in r.algorithm), None)
+
+    if qpso_res and exact_res and exact_res.fitness > 0:
+        gap_pct = ((qpso_res.fitness - exact_res.fitness) / exact_res.fitness) * 100
+        comparison_summary["qpso_optimality_gap_pct"] = round(gap_pct, 2)
+
+    if qpso_res and ga_res and ga_res.fitness > 0:
+        diff_pct = ((ga_res.fitness - qpso_res.fitness) / ga_res.fitness) * 100
+        comparison_summary["qpso_improvement_over_ga_pct"] = round(diff_pct, 2)
+
+    return VRPBenchmarkResponse(
+        dataset_id=req.dataset_id,
+        instance_name=instance_name,
+        num_stops=len(instance.stops),
+        num_vehicles=len(instance.vehicles),
+        results=results,
+        winner=winner,
+        comparison_summary=comparison_summary,
+    )
+

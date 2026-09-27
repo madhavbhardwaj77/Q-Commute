@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TRUST-SOC: Micro Project Presentation</title>
+<style>
+  :root {
+    --bg-dark: #0b132b;
+    --card-dark: #1b263b;
+    --border-dark: #415a77;
+    --cyan: #00d2ff;
+    --bg-light: #f8fafc;
+    --card-light: #ffffff;
+    --border-light: #e2e8f0;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --blue: #0284c7;
+    --green: #10b981;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --purple: #8b5cf6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  body { background: #020617; color: var(--text-main); display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; overflow-x: hidden; }
+  
+  /* Slide Viewport */
+  #presentation-container {
+    width: 1200px;
+    height: 675px; /* 16:9 ratio */
+    position: relative;
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg-light);
+  }
+
+  .slide {
+    display: none;
+    width: 100%;
+    height: 100%;
+    padding: 40px 50px;
+    position: absolute;
+    top: 0; left: 0;
+    overflow: hidden;
+  }
+  .slide.active { display: flex; flex-direction: column; }
+  
+  /* Slide Themes */
+  .slide.dark-theme { background: var(--bg-dark); color: #fff; }
+  .slide.light-theme { background: var(--bg-light); color: var(--text-main); }
+  
+  /* Header */
+  .slide-header {
+    border-bottom: 2px solid var(--border-light);
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+  }
+  .slide-breadcrumb {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--blue);
+    text-transform: uppercase;
+  }
+  .slide-title {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-main);
+    margin-top: 4px;
+  }
+  
+  /* Cards & Layouts */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; flex: 1; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; flex: 1; }
+  .card {
+    background: var(--card-light);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+  }
+  .card-header { font-size: 16px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card-bullet { margin-bottom: 10px; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+  .card-bullet strong { color: var(--text-main); }
+
+  /* Tables */
+  .styled-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    flex: 1;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+  }
+  .styled-table th {
+    background: var(--bg-dark);
+    color: #fff;
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 700;
+  }
+  .styled-table td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-light);
+    color: var(--text-main);
+    vertical-align: top;
+    line-height: 1.4;
+  }
+  .styled-table tr:nth-child(even) { background: #f1f5f9; }
+  .highlight-cell { background: #f0f9ff !important; font-weight: 700; color: var(--blue) !important; }
+
+  /* Navigation Bar */
+  .toolbar {
+    margin-top: 18px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    color: #94a3b8;
+    font-size: 14px;
+  }
+  .toolbar button {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #f8fafc;
+    padding: 8px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+  }
+  .toolbar button:hover { background: var(--blue); border-color: var(--blue); }
+  
+  /* Speaker Notes Panel */
+  #speaker-notes {
+    margin-top: 14px;
+    width: 1200px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 16px 20px;
+    color: #cbd5e1;
+    font-size: 13.5px;
+    line-height: 1.6;
+    display: block;
+  }
+  #speaker-notes strong { color: var(--cyan); }
+  
+  /* Editable indicator */
+  [contenteditable="true"] { outline: none; border-radius: 4px; padding: 2px 4px; transition: background 0.2s; }
+  [contenteditable="true"]:hover { background: rgba(2, 132, 199, 0.08); }
+  [contenteditable="true"]:focus { background: rgba(2, 132, 199, 0.15); box-shadow: 0 0 0 2px var(--blue); }
+</style>
+</head>
+<body>
+
+<div id="presentation-container">
+
+  <!-- SLIDE 1: TITLE & OUTLINE -->
+  <div class="slide dark-theme active" data-slide="1">
+    <div style="background: var(--cyan); height: 5px; width: 100%; position: absolute; top:0; left:0;"></div>
+    <div style="margin-top: 20px;">
+      <span style="display: inline-block; background: var(--card-dark); border: 1px solid var(--cyan); color: var(--cyan); padding: 5px 14px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 1px;">
+        B.TECH CSE MICRO PROJECT PRESENTATION
+      </span>
+      <h1 contenteditable="true" style="font-size: 44px; margin-top: 14px; font-weight: 800; color: #fff;">TRUST - SOC</h1>
+      <p contenteditable="true" style="font-size: 18px; color: #94a3b8; margin-top: 6px;">
+        A Trust-Aware, Two-Agent Intrusion Detection & Triage Pipeline with Evidence-Linked Reporting
+      </p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 36px; flex: 1;">
+      <div class="card" style="background: var(--card-dark); border-color: var(--border-dark);">
+        <div class="card-header" style="color: var(--cyan);">STUDENT TEAM</div>
+        <div class="card-bullet" style="color: #e2e8f0; font-size: 13.5px;" contenteditable="true">
+          <strong>Madhav Bhardwaj</strong><br><span style="color: #94a3b8; font-size: 12px;">Roll: 10311502724</span>
+        </div>
+        <div class="card-bullet" style="color: #e2e8f0; font-size: 13.5px;" contenteditable="true">
+          <strong>Vasvi Gupta</strong><br><span style="color: #94a3b8; font-size: 12px;">Roll: 10411502724</span>
+        </div>
+        <div class="card-bullet" style="color: #e2e8f0; font-size: 13.5px;" contenteditable="true">
+          <strong>Anushka Saxena</strong><br><span style="color: #94a3b8; font-size: 12px;">Roll: 11111502724</span>
+        </div>
+      </div>
+      <div class="card" style="background: var(--card-dark); border-color: var(--border-dark);">
+        <div class="card-header" style="color: var(--cyan);">GUIDE & AFFILIATION</div>
+        <div class="card-bullet" style="color: #94a3b8;" contenteditable="true">Under the Guidance of:</div>
+        <div class="card-bullet" style="color: #fff; font-size: 14px; font-weight: 700;" contenteditable="true">Mr. Mohit Tiwari</div>
+        <div class="card-bullet" style="color: #cbd5e1; font-size: 12px;" contenteditable="true">Assistant Professor, Dept. of CSE</div>
+        <div class="card-bullet" style="color: #94a3b8; font-size: 12px; margin-top: 10px;" contenteditable="true">
+          Bharati Vidyapeeth's College of Engineering<br>(Affiliated to GGSIPU, Delhi)
+        </div>
+      </div>
+      <div class="card" style="background: var(--card-dark); border-color: var(--border-dark);">
+        <div class="card-header" style="color: var(--cyan);">PRESENTATION AGENDA</div>
+        <div class="card-bullet" style="color: #e2e8f0; font-size: 12px;" contenteditable="true">
+          • 1. Problem Context & Alert Fatigue<br>
+          • 2. The TRUST-SOC Agentic Solution<br>
+          • 3. Literature Survey (3 Slides)<br>
+          • 4. Critical Research Gap Analysis<br>
+          • 5. Scoped Project Objectives<br>
+          • 6. Proposed 6-Stage Methodology<br>
+          • 7. Performance Comparison Matrix
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: INTRODUCTION PART 1 -->
+  <div class="slide light-theme" data-slide="2">
+    <div class="slide-header">
+      <div class="slide-breadcrumb">TRUST-SOC | MICRO PROJECT PRESENTATION</div>
+      <div class="slide-title" contenteditable="true">Introduction: The SOC Alert Fatigue Crisis & Baseline Deficiencies</div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header" style="color: var(--blue);">The Modern SOC Landscape</div>
+        <div class="card-bullet" contenteditable="true"><strong>Frontline Cyber Defence:</strong> SOCs continuously monitor network flows, host telemetry, and endpoint logs to protect enterprise assets.</div>
+        <div class="card-bullet" contenteditable="true"><strong>Event Ingestion Scale:</strong> Modern enterprises generate millions of events daily. Intrusion detection engines routinely flag thousands of raw alerts.</div>
+        <div class="card-bullet" contenteditable="true"><strong>The 'Alert Fatigue' Bottleneck:</strong> Over 80–90% of alerts are false alarms. Analysts suffer severe cognitive overload, deprioritizing alerts and missing actual intrusions.</div>
+        <div class="card-bullet" contenteditable="true"><strong>Failure of Standalone Classifiers:</strong> A single model evaluated on static benchmark data cannot be safely trusted: it lacks self-verification and provides zero auditability.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="color: var(--red);">Key Deficiencies in Conventional IDS Research</div>
+        <div class="card-bullet" contenteditable="true"><strong>1. No Second Line of Defence:</strong> Classifier errors reach the analyst unchecked. False alarms are passively measured, never filtered in-pipeline.</div>
+        <div class="card-bullet" contenteditable="true"><strong>2. Opaque, Black-Box Verdicts:</strong> Categorical labels (e.g. 'DDoS') without feature attribution; analysts cannot discern why an alert triggered.</div>
+        <div class="card-bullet" contenteditable="true"><strong>3. Absent Audit Trail:</strong> Alerts are disconnected from raw network logs, feature vectors, and corroboration rationale, impeding compliance review.</div>
+        <div class="card-bullet" contenteditable="true"><strong>4. Uniform Urgency:</strong> Without multi-source confidence fusion, analysts must treat every notification with equal urgency.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: INTRODUCTION PART 2 -->
+  <div class="slide light-theme" data-slide="3">
+    <div class="slide-header">
+      <div class="slide-breadcrumb">TRUST-SOC | MICRO PROJECT PRESENTATION</div>
+      <div class="slide-title" contenteditable="true">Introduction: The TRUST-SOC Multi-Agent Solution</div>
+    </div>
+    <div class="card" style="background: #f0f9ff; border-color: var(--blue); margin-bottom: 20px; padding: 14px 20px;">
+      <div style="font-size: 14px; font-weight: 700; color: var(--blue);" contenteditable="true">The TRUST-SOC Paradigm: Decomposing SOC Triage into Cooperating Agents</div>
+      <p style="font-size: 12.5px; color: var(--text-main); margin-top: 4px;" contenteditable="true">
+        Instead of a monolithic model, TRUST-SOC implements a detect-then-verify multi-agent architecture. A Detection Agent proposes candidate alerts with local SHAP explanations, while an independent Verification Agent scrutinizes the hypothesis via rules, baselines, anomaly scores, and semantic explainability before generating an evidence report.
+      </p>
+    </div>
+    <div class="grid-4">
+      <div class="card" style="border-top: 4px solid var(--blue);">
+        <div class="card-header" style="font-size: 14px;">Detection Agent</div>
+        <div style="font-size: 11px; font-weight: 700; color: var(--blue); margin-bottom: 8px;">Proposes Hypotheses</div>
+        <div class="card-bullet" contenteditable="true">• Ingests normalized network flows.</div>
+        <div class="card-bullet" contenteditable="true">• Supervised ensemble (Random Forest / XGBoost).</div>
+        <div class="card-bullet" contenteditable="true">• Outputs class + raw probability p_d.</div>
+        <div class="card-bullet" contenteditable="true">• Generates local SHAP feature attributions.</div>
+      </div>
+      <div class="card" style="border-top: 4px solid var(--purple);">
+        <div class="card-header" style="font-size: 14px;">Verification Agent</div>
+        <div style="font-size: 11px; font-weight: 700; color: var(--purple); margin-bottom: 8px;">Scrutinizes & Filters</div>
+        <div class="card-bullet" contenteditable="true">• Independent adversarial critic.</div>
+        <div class="card-bullet" contenteditable="true">• Checks 4 orthogonal corroboration signals.</div>
+        <div class="card-bullet" contenteditable="true">• Audits semantic consistency of top SHAP features.</div>
+        <div class="card-bullet" contenteditable="true">• Issues CONFIRM, REDUCE, or REJECT.</div>
+      </div>
+      <div class="card" style="border-top: 4px solid var(--amber);">
+        <div class="card-header" style="font-size: 14px;">Confidence Engine</div>
+        <div style="font-size: 11px; font-weight: 700; color: var(--amber); margin-bottom: 8px;">Stratifies Priority</div>
+        <div class="card-bullet" contenteditable="true">• Fuses detection & verification scores.</div>
+        <div class="card-bullet" contenteditable="true">• Computes C = α·p_d + β·p_v + γ·r_corr.</div>
+        <div class="card-bullet" contenteditable="true">• Maps into High, Medium, Low severity bands.</div>
+        <div class="card-bullet" contenteditable="true">• Enables prioritized analyst triage.</div>
+      </div>
+      <div class="card" style="border-top: 4px solid var(--green);">
+        <div class="card-header" style="font-size: 14px;">SOC Dashboard</div>
+        <div style="font-size: 11px; font-weight: 700; color: var(--green); margin-bottom: 8px;">Actionable Triage</div>
+        <div class="card-bullet" contenteditable="true">• Real-time confidence-coded alert stream.</div>
+        <div class="card-bullet" contenteditable="true">• Full JSON & PDF audit report per alert.</div>
+        <div class="card-bullet" contenteditable="true">• Traceable link: Raw flow → SHAP → Decision.</div>
+        <div class="card-bullet" contenteditable="true">• Filter by status, attack class, and time.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: LITERATURE SURVEY PART 1 -->
+  <div class="slide light-theme" data-slide="4">
+    <div class="slide-header">
+      <div class="slide-breadcrumb">TRUST-SOC | MICRO PROJECT PRESENTATION</div>
+      <div class="slide-title" contenteditable="true">Literature Survey: ML Intrusion Detection & Benchmark Datasets</div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header" style="color: var(--blue); font-size: 14px;">Buczak & Guven (IEEE COMST 2016)</div>
+        <div style="font-size: 11.5px; font-style: italic; color: var(--text-main); margin-bottom: 8px;">Survey of Data Mining & ML Methods for Cybersecurity Intrusion Detection</div>
+        <div class="card-bullet" contenteditable="true">• Comprehensive taxonomy of classical ML algorithms (Decision Trees, SVM, Naïve Bayes, Clustering).</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Key Finding:</strong> High benchmark accuracy does not translate to real-world SOC deployment; identified false positive rate (FPR) as primary operational bottleneck.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Relevance:</strong> Confirms the fundamental limit of standalone classifiers without secondary verification.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="color: var(--blue); font-size: 14px;">Khraisat et al. (Cybersecurity 2019)</div>
+        <div style="font-size: 11.5px; font-style: italic; color: var(--text-main); margin-bottom: 8px;">Survey of Intrusion Detection Systems: Techniques, Datasets and Challenges</div>
+        <div class="card-bullet" contenteditable="true">• Examines evolution of signature vs. anomaly-based IDS, current benchmarks, and open challenges.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Key Finding:</strong> Evolving attack diversity, dataset quality, and unacceptably high false alarm rates remain unresolved.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Relevance:</strong> Directly motivates TRUST-SOC's independent verification layer as a filter for false alarms.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="color: var(--blue); font-size: 14px;">Sharafaldin, Lashkari & Ghorbani (ICISSP 2018)</div>
+        <div style="font-size: 11.5px; font-style: italic; color: var(--text-main); margin-bottom: 8px;">Toward Generating a New Intrusion Detection Dataset (CICIDS2017 & CSE-CIC-IDS2018)</div>
+        <div class="card-bullet" contenteditable="true">• Created CICIDS2017 to replace stale KDD'99/NSL-KDD; captures 5 days of realistic traffic across 11 attack classes.</div>
+        <div class="card-bullet" contenteditable="true">• Scaled to CSE-CIC-IDS2018 (AWS enterprise emulation, 450 machines, 80+ CICFlowMeter features).</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Relevance:</strong> Selected as primary (CICIDS2017) and cross-validation (CSE-CIC-IDS2018) datasets.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="color: var(--blue); font-size: 14px;">Panigrahi & Borah (IJET 2018)</div>
+        <div style="font-size: 11.5px; font-style: italic; color: var(--text-main); margin-bottom: 8px;">A Detailed Analysis of CICIDS2017 Dataset for Designing Intrusion Detection Systems</div>
+        <div class="card-bullet" contenteditable="true">• Rigorous empirical audit identifying label inconsistencies, missing values, infinite packet metrics, and severe class skews.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Key Finding:</strong> Classifiers trained uncritically suffer from severe metric inflation.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Relevance:</strong> Directly guides our data preprocessing pipeline and justifies why raw model outputs must be verified.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: LITERATURE SURVEY PART 2 -->
+  <div class="slide light-theme" data-slide="5">
+    <div class="slide-header">
+      <div class="slide-breadcrumb">TRUST-SOC | MICRO PROJECT PRESENTATION</div>
+      <div class="slide-title" contenteditable="true">Literature Survey: Explainable AI & Multi-Agent Triage</div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header" style="color: var(--purple); font-size: 14px;">Lundberg & Lee (NeurIPS 2017)</div>
+        <div style="font-size: 11.5px; font-style: italic; color: var(--text-main); margin-bottom: 8px;">A Unified Approach to Interpreting Model Predictions (SHAP)</div>
+        <div class="card-bullet" contenteditable="true">• Introduced SHAP (SHapley Additive exPlanations), assigning game-theoretic feature attributions to individual predictions.</div>
+        <div class="card-bullet" contenteditable="true">• TreeSHAP enables exact, polynomial-time feature importance calculation for ensemble tree models.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Relevance:</strong> Mathematical basis for Detection Agent explanations and Verification Agent consistency checks.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="color: var(--purple); font-size: 14px;">Wang et al. (IEEE Access 2020)</div>
+        <div style="font-size: 11.5px; font-style: italic; color: var(--text-main); margin-bottom: 8px;">An Explainable Machine Learning Framework for Intrusion Detection Systems</div>
+        <div class="card-bullet" contenteditable="true">• Evaluated SHAP and LIME feature-attribution specifically on network intrusion detection classifiers.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Key Finding:</strong> Providing feature-level explanations materially accelerates analyst triage and calibrated trust.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Relevance:</strong> TRUST-SOC operationalizes SHAP programmatically as an automated verification signal.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="color: var(--purple); font-size: 14px;">Wei et al. (arXiv 2025) — CORTEX</div>
+        <div style="font-size: 11.5px; font-style: italic; color: var(--text-main); margin-bottom: 8px;">Collaborative LLM Agents for High-Stakes Alert Triage</div>
+        <div class="card-bullet" contenteditable="true">• Multi-agent LLM system decomposing triage across behavioral-analysis, evidence-gathering, and reasoning agents.</div>
+        <div class="card-bullet" contenteditable="true">• Demonstrated substantial false-positive reduction and superior investigation quality over monolithic models.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Relevance:</strong> Architectural precedent proving that an independent verification agent drastically cuts false alarms.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="color: var(--purple); font-size: 14px;">Ameen et al. (2026) & AI-SOC Surveys</div>
+        <div style="font-size: 11.5px; font-style: italic; color: var(--text-main); margin-bottom: 8px;">QASecClaw: Multi-Agent FP Reduction & AI-Augmented SOC Surveys</div>
+        <div class="card-bullet" contenteditable="true">• QASecClaw achieved an 88.6% false-positive reduction via dedicated Validation and Evidence-Correlation agents.</div>
+        <div class="card-bullet" contenteditable="true">• Surveys (Big Data Cogn. Comput. 2025) confirm alert triage, log summarization, and reporting are prime agentic targets.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Relevance:</strong> Confirms multi-agent security triage effectiveness while highlighting the need for reproducible, cost-effective models.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: LITERATURE SURVEY PART 3 -->
+  <div class="slide light-theme" data-slide="6">
+    <div class="slide-header">
+      <div class="slide-breadcrumb">TRUST-SOC | MICRO PROJECT PRESENTATION</div>
+      <div class="slide-title" contenteditable="true">Literature Survey: Summary & Comparative Synthesis Matrix</div>
+    </div>
+    <table class="styled-table">
+      <thead>
+        <tr>
+          <th style="width: 15%;">Reference</th>
+          <th style="width: 18%;">Domain / Focus</th>
+          <th style="width: 25%;">Key Contribution</th>
+          <th style="width: 20%;">Identified Gap / Limitation</th>
+          <th style="width: 22%;">Relevance to TRUST-SOC</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>[1][2] Sharafaldin (2018)</strong></td>
+          <td>CICIDS2017 & CSE-CIC-IDS2018</td>
+          <td>Realistic attack & benign traffic with 80+ network flow features.</td>
+          <td>Labels have noise/imbalance; static evaluation without verification.</td>
+          <td>Primary dataset for training; secondary for cross-dataset testing.</td>
+        </tr>
+        <tr>
+          <td><strong>[3] Panigrahi (2018)</strong></td>
+          <td>Dataset Quality Audit</td>
+          <td>Empirical critique of label inconsistencies & extreme class skews.</td>
+          <td>Identified flaws but did not provide an operational pipeline to handle them.</td>
+          <td>Directly motivates rigorous data cleaning & independent verification.</td>
+        </tr>
+        <tr>
+          <td><strong>[4][10] Buczak / Khraisat</strong></td>
+          <td>IDS Surveys & Taxonomy</td>
+          <td>Catalog of ML/DM intrusion detection methods & metrics.</td>
+          <td>High offline accuracy fails in real SOCs due to unmanaged false positives.</td>
+          <td>Frames core problem statement: need for automated FP mitigation.</td>
+        </tr>
+        <tr>
+          <td><strong>[5][6] Lundberg / Wang</strong></td>
+          <td>Explainable AI (SHAP)</td>
+          <td>Game-theoretic feature attributions for tree & ensemble classifiers.</td>
+          <td>XAI used solely for post-hoc human inspection, not automated triage.</td>
+          <td>Basis for Detection Agent explanations & Verification Agent audit.</td>
+        </tr>
+        <tr>
+          <td><strong>[7][8][9] CORTEX / QASecClaw</strong></td>
+          <td>Multi-Agent Triage</td>
+          <td>Agent collaboration achieves 40%–88% reduction in false positives.</td>
+          <td>Relies on heavy LLM API billing & proprietary enterprise logs.</td>
+          <td>Architectural precedent: adapts detect-then-verify to lightweight ML.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- SLIDE 7: RESEARCH GAP -->
+  <div class="slide light-theme" data-slide="7">
+    <div class="slide-header">
+      <div class="slide-breadcrumb">TRUST-SOC | MICRO PROJECT PRESENTATION</div>
+      <div class="slide-title" contenteditable="true">Research Gap: Bridging the Divide in SOC Automation</div>
+    </div>
+    <div class="grid-2" style="margin-bottom: 16px;">
+      <div class="card">
+        <div class="card-header" style="color: var(--red);">Silo 1: Academic Benchmark IDS ([1]-[6], [10])</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Single Standalone Model:</strong> Focuses strictly on static test-set accuracy of a single classifier without self-questioning.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Zero In-Flight Verification:</strong> Errors pass directly to alerts; false-positive burden is never reduced in the pipeline.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Passive Visual Explanations:</strong> SHAP/LIME used purely for static human charts, never utilized as a machine decision signal.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>No SOC Interface:</strong> Research rarely ships with a functional dashboard or exportable evidence-linked audit trails.</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="color: var(--amber);">Silo 2: Production Multi-Agent LLM SOCs ([7]-[9])</div>
+        <div class="card-bullet" contenteditable="true">• <strong>High API Cost & Latency:</strong> Built on commercial large-scale LLMs (GPT-4/Claude) requiring continuous paid API tokens.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Tethered to Enterprise Logs:</strong> Evaluated only on closed, proprietary SIEM data; non-reproducible for academic research.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Overkill for Flow Triage:</strong> Complex prompt chains introduce hallucination risks and high response latencies.</div>
+        <div class="card-bullet" contenteditable="true">• <strong>Inaccessible Implementation:</strong> Prohibitive complexity makes them impossible to replicate in a semester micro-project.</div>
+      </div>
+    </div>
+    <div class="card" style="background: #f0fdf4; border-color: var(--green); padding: 14px 20px;">
+      <div style="font-size: 13.5px; font-weight: 700; color: var(--green);" contenteditable="true">THE RESEARCH GAP ADDRESSED BY TRUST-SOC</div>
+      <p style="font-size: 11.5px; color: var(--text-main); margin-top: 4px; line-height: 1.5;" contenteditable="true">
+        There is currently <strong>NO</strong> lightweight, fully reproducible detect-then-verify pipeline that: (1) Is grounded in standardized, open benchmark datasets (CICIDS2017 / CSE-CIC-IDS2018) rather than proprietary enterprise logs; (2) Couples a classical ML Detection Agent with a rule-, baseline-, and explainability-driven Verification Agent instead of costly LLM APIs; (3) Computes a principled, multi-source composite confidence score (C) rather than relying on a raw classifier probability; and (4) Generates an evidence-linked audit report (JSON/PDF) and surfaces the alert stream on a working SOC dashboard within a semester scope.
+      </p>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: OBJECTIVES -->
+  <div class="slide light-theme" data-slide="8">
+    <div class="slide-header">
+      <div class="slide-breadcrumb">TRUST-SOC | MICRO PROJECT PRESENTATION</div>
+      <div class="slide-title" contenteditable="true">Project Objectives: Frozen Scope & Measurable Deliverables</div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px; flex: 1;">
+      <div class="card" style="padding: 10px 16px; flex-direction: row; align-items: center; gap: 14px;">
+        <div style="background: var(--blue); color: #fff; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">1</div>
+        <div style="font-size: 12px;" contenteditable="true"><strong>Dataset Ingestion & Normalization:</strong> Clean CICIDS2017 & CSE-CIC-IDS2018, remove NaNs/inf/duplicates, and normalize to streaming JSON schema.</div>
+      </div>
+      <div class="card" style="padding: 10px 16px; flex-direction: row; align-items: center; gap: 14px;">
+        <div style="background: var(--blue); color: #fff; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">2</div>
+        <div style="font-size: 12px;" contenteditable="true"><strong>Log-Analysis Detection Agent:</strong> Train Random Forest baseline (with XGBoost alternative) outputting class labels, raw probability p_d, and top-k SHAP values.</div>
+      </div>
+      <div class="card" style="padding: 10px 16px; flex-direction: row; align-items: center; gap: 14px;">
+        <div style="background: var(--blue); color: #fff; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">3</div>
+        <div style="font-size: 12px;" contenteditable="true"><strong>Multi-Signal Verification Agent:</strong> Implement 4 independent checks (static rules, Isolation Forest anomaly, host baseline, SHAP consistency) issuing CONFIRM, REDUCE, or REJECT.</div>
+      </div>
+      <div class="card" style="padding: 10px 16px; flex-direction: row; align-items: center; gap: 14px;">
+        <div style="background: var(--blue); color: #fff; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">4</div>
+        <div style="font-size: 12px;" contenteditable="true"><strong>Confidence Scoring Engine:</strong> Formulate C = α·p_d + β·p_v + γ·r_corr; partition alerts into High (≥0.80), Medium (0.50–0.80), and Low (<0.50) severity bands.</div>
+      </div>
+      <div class="card" style="padding: 10px 16px; flex-direction: row; align-items: center; gap: 14px;">
+        <div style="background: var(--blue); color: #fff; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">5</div>
+        <div style="font-size: 12px;" contenteditable="true"><strong>Evidence-Linked Reporting:</strong> Automate compilation of structured per-alert JSON & PDF reports linking raw flows, SHAP graphs, and MITRE ATT&CK tags.</div>
+      </div>
+      <div class="card" style="padding: 10px 16px; flex-direction: row; align-items: center; gap: 14px;">
+        <div style="background: var(--blue); color: #fff; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">6</div>
+        <div style="font-size: 12px;" contenteditable="true"><strong>Functional SOC Dashboard:</strong> Build responsive analyst dashboard with real-time alert feed, category filters, and modal drill-down into evidence reports.</div>
+      </div>
+      <div class="card" style="padding: 10px 16px; flex-direction: row; align-items: center; gap: 14px;">
+        <div style="background: var(--blue); color: #fff; border-radius: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px;">7</div>
+        <div style="font-size: 12px;" contenteditable="true"><strong>Rigorous Empirical Evaluation:</strong> Benchmark classification metrics, Cohen's kappa agreement, and specifically the False-Positive Rate (FPR) reduction.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: PROPOSED METHODOLOGY -->
+  <div class="slide light-theme" data-slide="9">
+    <div class="slide-header">
+      <div class="slide-breadcrumb">TRUST-SOC | MICRO PROJECT PRESENTATION</div>
+      <div class="slide-title" contenteditable="true">Proposed Methodology: 6-Stage Pipeline & Multi-Signal Workflow</div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 18px;">
+      <div class="card" style="padding: 10px; border-top: 3px solid var(--blue); font-size: 11px;">
+        <strong style="color: var(--blue);">Stage 1</strong><br><strong>Log Ingestion</strong><br><span style="color: var(--text-muted); font-size: 10px;">Replays CICIDS records into JSON flows</span>
+      </div>
+      <div class="card" style="padding: 10px; border-top: 3px solid var(--blue); font-size: 11px;">
+        <strong style="color: var(--blue);">Stage 2</strong><br><strong>Detection Agent</strong><br><span style="color: var(--text-muted); font-size: 10px;">Random Forest / XGBoost; p_d & SHAP</span>
+      </div>
+      <div class="card" style="padding: 10px; border-top: 3px solid var(--purple); font-size: 11px;">
+        <strong style="color: var(--purple);">Stage 3</strong><br><strong>Verification Agent</strong><br><span style="color: var(--text-muted); font-size: 10px;">4-signal audit; CONFIRM / REDUCE / REJECT</span>
+      </div>
+      <div class="card" style="padding: 10px; border-top: 3px solid var(--amber); font-size: 11px;">
+        <strong style="color: var(--amber);">Stage 4</strong><br><strong>Confidence Engine</strong><br><span style="color: var(--text-muted); font-size: 10px;">Fuses p_d + p_v + r_corr; High/Med/Low</span>
+      </div>
+      <div class="card" style="padding: 10px; border-top: 3px solid var(--green); font-size: 11px;">
+        <strong style="color: var(--green);">Stage 5</strong><br><strong>Report Generator</strong><br><span style="color: var(--text-muted); font-size: 10px;">JSON + PDF evidence-linked reports</span>
+      </div>
+      <div class="card" style="padding: 10px; border-top: 3px solid var(--blue); font-size: 11px;">
+        <strong style="color: var(--blue);">Stage 6</strong><br><strong>SOC Dashboard</strong><br><span style="color: var(--text-muted); font-size: 10px;">Live feed, charts & report drill-down</span>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header" style="color: var(--purple); font-size: 14px;">Verification Agent: 4 Corroboration Signals</div>
+        <div class="card-bullet" contenteditable="true"><strong>(a) Rule / Context Corroboration (r):</strong> Cross-checks destination asset criticality, service whitelist, and MITRE ATT&CK technique pattern match.</div>
+        <div class="card-bullet" contenteditable="true"><strong>(b) Statistical Anomaly Corroboration (s):</strong> Re-scores flow with an independent unsupervised Isolation Forest trained on benign traffic.</div>
+        <div class="card-bullet" contenteditable="true"><strong>(c) Host/IP Behavioral-Baseline Check (b):</strong> Evaluates rolling traffic (packet rate, byte volume, connection bursts) against historical profile.</div>
+        <div class="card-bullet" contenteditable="true"><strong>(d) SHAP Explanation-Consistency Check (e):</strong> Confirms top SHAP features match the attack semantics (e.g. packet rate/duration for DDoS).</div>
+      </div>
+      <div class="card">
+        <div class="card-header" style="color: var(--green); font-size: 14px;">Decision Rules, Confidence Fusion & Progress</div>
+        <div class="card-bullet" contenteditable="true"><strong>CONFIRM (p_v ≥ 0.70):</strong> Alert retained at full strength; escalated for priority scoring.</div>
+        <div class="card-bullet" contenteditable="true"><strong>REDUCE (0.40 ≤ p_v &lt; 0.70):</strong> Confidence down-weighted; flagged 'Suspicious - Needs Review'.</div>
+        <div class="card-bullet" contenteditable="true"><strong>REJECT (p_v &lt; 0.40 or ≥2 conflicts):</strong> Filtered as verified False Positive; logged to audit.</div>
+        <div style="background: #f1f5f9; padding: 8px 12px; border-radius: 6px; margin-top: 6px; font-size: 11.5px;" contenteditable="true">
+          <strong>Score Fusion:</strong> C = α·p_d + β·p_v + γ·r_corr &nbsp;(α=0.4, β=0.4, γ=0.2)<br>
+          <strong>Progress:</strong> CICIDS2017 &amp; CSE-CIC-IDS2018 cleaned; 6 threat categories active; Dual reporting + SOC UI wired.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: PERFORMANCE COMPARISON -->
+  <div class="slide light-theme" data-slide="10">
+    <div class="slide-header">
+      <div class="slide-breadcrumb">TRUST-SOC | MICRO PROJECT PRESENTATION</div>
+      <div class="slide-title" contenteditable="true">Performance Comparison: Existing Methodologies vs. TRUST-SOC</div>
+    </div>
+    <table class="styled-table">
+      <thead>
+        <tr>
+          <th style="width: 20%;">Evaluation Dimension</th>
+          <th style="width: 20%;">Traditional Signature IDS<br>(Snort, Zeek)</th>
+          <th style="width: 20%;">Standalone ML Classifier<br>(Buczak, Wang)</th>
+          <th style="width: 20%;">Multi-Agent LLM Systems<br>(CORTEX, QASecClaw)</th>
+          <th style="width: 20%; background: var(--blue);">TRUST-SOC Pipeline<br>(Proposed Architecture)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>False Positive Defence</strong></td>
+          <td><strong>None:</strong> Strict rules trigger high benign noise.</td>
+          <td><strong>None:</strong> Raw classifier output passes straight to alerts.</td>
+          <td><strong>High:</strong> LLM agents debate &amp; correlate alerts.</td>
+          <td class="highlight-cell">High: Independent 4-signal verification engine.</td>
+        </tr>
+        <tr>
+          <td><strong>Explainability</strong></td>
+          <td><strong>Partial:</strong> Matched signature regex only.</td>
+          <td><strong>Post-hoc:</strong> Static SHAP plots for offline viewing.</td>
+          <td><strong>Textual:</strong> LLM reasoning narrative (uncalibrated).</td>
+          <td class="highlight-cell">Active: SHAP feature ranking audits semantic validity.</td>
+        </tr>
+        <tr>
+          <td><strong>Alert Prioritisation</strong></td>
+          <td>Static severity levels (Low/Med/High).</td>
+          <td>Single probability score p_d; no multi-source fusion.</td>
+          <td>Categorical triage verdict via prompt instructions.</td>
+          <td class="highlight-cell">Fused composite score C = α·p_d + β·p_v + γ·r_corr.</td>
+        </tr>
+        <tr>
+          <td><strong>Auditability &amp; Reports</strong></td>
+          <td>Log line only; no feature or model link.</td>
+          <td>Opaque label; no structured evidence bundle.</td>
+          <td>Free-form chat text; non-deterministic.</td>
+          <td class="highlight-cell">Structured JSON &amp; PDF: Raw flow, SHAP, MITRE tags.</td>
+        </tr>
+        <tr>
+          <td><strong>Resource Overhead</strong></td>
+          <td>Very Low: Pattern matching, minimal memory.</td>
+          <td>Low: Fast offline training, millisecond inference.</td>
+          <td>Very High: Paid commercial API tokens, high latency.</td>
+          <td class="highlight-cell">Low/Moderate: Fast scikit-learn/XGBoost inference.</td>
+        </tr>
+        <tr>
+          <td><strong>Reproducibility</strong></td>
+          <td>Moderate: Requires live traffic or custom pcaps.</td>
+          <td>High: Uses standard open datasets (CICIDS).</td>
+          <td>Very Low: Proprietary SIEM logs, closed APIs.</td>
+          <td class="highlight-cell">100% Reproducible: CICIDS2017 &amp; CSE-CIC-IDS2018.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- PRESENTATION CONTROLS -->
+<div class="toolbar">
+  <button id="prevBtn" onclick="prevSlide()">◀ Previous</button>
+  <span id="slideCounter">Slide 1 of 10</span>
+  <button id="nextBtn" onclick="nextSlide()">Next ▶</button>
+  <button onclick="toggleFullScreen()">⛶ Fullscreen</button>
+  <button onclick="window.print()">🖨️ Print / Save to PDF</button>
+  <span style="font-size: 12px; margin-left: 10px; color: #64748b;">(Click any text on the slide to edit directly)</span>
+</div>
+
+<!-- SPEAKER NOTES CONTAINER -->
+<div id="speaker-notes">
+  <strong>SPEAKER NOTES (Slide 1):</strong>
+  <p id="notesContent">
+    Good morning/afternoon respected panel members and our mentor Mr. Mohit Tiwari. We are Madhav Bhardwaj, Vasvi Gupta, and Anushka Saxena, presenting our B.Tech Micro Project entitled 'TRUST-SOC'. TRUST-SOC introduces a trust-aware, two-agent intrusion detection and triage pipeline with evidence-linked reporting. In today's presentation, we will walk you through the operational crisis of alert fatigue in SOCs, our literature review across classical ML, explainable AI, and multi-agent systems, the identified research gaps, frozen objectives, our six-stage proposed methodology, and a detailed performance comparison with existing methodologies.
+  </p>
+</div>
+
+<script>
+  const notes = {
+    1: "Good morning/afternoon respected panel members and our mentor Mr. Mohit Tiwari. We are Madhav Bhardwaj, Vasvi Gupta, and Anushka Saxena, presenting our B.Tech Micro Project entitled 'TRUST-SOC'. TRUST-SOC introduces a trust-aware, two-agent intrusion detection and triage pipeline with evidence-linked reporting. In today's presentation, we will walk you through the operational crisis of alert fatigue in SOCs, our literature review across classical ML, explainable AI, and multi-agent systems, the identified research gaps, frozen objectives, our six-stage proposed methodology, and a detailed performance comparison with existing methodologies.",
+    2: "On slide 2, we introduce the primary motivation behind TRUST-SOC. Security Operations Centers (SOCs) are overwhelmed by massive alert volumes. In enterprise networks, intrusion detection systems routinely generate thousands of alerts a day, the vast majority of which turn out to be false alarms. This causes severe alert fatigue: analysts can no longer investigate every alert thoroughly, creating blind spots where real breaches slip through. Furthermore, conventional academic models suffer from four fatal flaws: they have no second line of defense against false alarms, their decisions are opaque black boxes, they provide no auditable trail back to raw flow evidence, and they fail to prioritize alerts based on multi-source confidence.",
+    3: "On slide 3, we reveal our solution: TRUST-SOC. Instead of treating intrusion detection as a single classification step, we decompose the SOC triage pipeline into specialized cooperating components. First, a Log-Analysis Detection Agent evaluates incoming flows and proposes candidate alerts with SHAP feature attributions. Crucially, its output is treated only as a proposal. Second, an independent Verification Agent scrutinizes the proposed alert through four orthogonal corroboration signals. Third, a Confidence Scoring Engine mathematically fuses these signals into a High, Medium, or Low severity band. Finally, every alert is compiled into an evidence-linked JSON and PDF report and surfaced on an interactive SOC dashboard.",
+    4: "Moving to our literature survey on slide 4: We review the foundations of ML-based IDS and benchmark datasets. Buczak & Guven and Khraisat et al. documented that despite decades of research, high offline accuracy on static benchmarks fails in production because of unacceptably high false alarm rates. In terms of datasets, Sharafaldin et al. introduced CICIDS2017 and CSE-CIC-IDS2018, which capture modern network protocols with over 80 flow features. However, Panigrahi and Borah's 2018 critique showed that CICIDS2017 contains critical label skews, duplicate flows, and infinite values that artificially inflate naive models. This justifies our meticulous data preprocessing and confirms that an unverified classifier prediction cannot be trusted.",
+    5: "On slide 5, we explore explainability and multi-agent triage in the literature. Lundberg and Lee's SHAP framework provides game-theoretic feature attribution, which Wang et al. demonstrated helps SOC analysts understand why an IDS triggered an alert. In TRUST-SOC, we take SHAP a step further: we do not just display it to humans; our Verification Agent programmatically verifies whether the top SHAP features match the expected semantics of the attack class. In the multi-agent space, recent breakthrough systems like CORTEX (2025) and QASecClaw (2026) demonstrated that decomposing triage into proposing and verifying agents yields up to an 88.6% reduction in false positives. This provides strong scientific validation for our detect-then-verify architecture.",
+    6: "Slide 6 provides our literature synthesis matrix. It maps out each key reference, its contribution, its limitation, and its direct relevance to TRUST-SOC. Notice the clear progression: Sharafaldin and Panigrahi establish the dataset landscape and its data-quality pitfalls; Buczak and Khraisat highlight the persistent false positive crisis; Lundberg and Wang give us the mathematics of explainability; and CORTEX and QASecClaw prove the effectiveness of multi-agent verification. TRUST-SOC synthesizes these findings into a unified, lightweight pipeline.",
+    7: "Slide 7 pinpoints our exact research gap. Today, the cybersecurity literature has fractured into two isolated silos. On one side, benchmark IDS research focuses exclusively on tuning single classifiers on static test sets without self-checking, and explanations remain passive images. On the other side, cutting-edge multi-agent systems like CORTEX prove that a second verification agent slashes false positives, but they rely on costly, closed, commercial LLM APIs and proprietary logs. TRUST-SOC fills this critical gap: we build a lightweight, 100% reproducible detect-then-verify pipeline using classical ML and explainability checks on open benchmark datasets, delivering the benefits of agentic verification without the cost or latency of LLMs.",
+    8: "Slide 8 articulates the seven frozen, measurable objectives of TRUST-SOC for our Micro Project. Each objective maps to an independently verifiable system module: 1. Ingestion and normalisation of CICIDS2017 and CSE-CIC-IDS2018; 2. Training the Log-Analysis Detection Agent with integrated SHAP feature explanations; 3. Designing the Verification Agent with its 4-signal corroboration logic; 4. Tuning the multi-source Confidence Scoring Engine and severity banding; 5. Automating per-alert evidence-linked JSON and PDF audit reporting; 6. Constructing the interactive SOC dashboard for triage and drill-down; and 7. Empirically evaluating our primary metric: the quantitative reduction in false-positive rate.",
+    9: "On slide 9, we detail our proposed methodology and end-to-end agent workflow. The pipeline moves sequentially through 6 stages: log ingestion, Detection Agent classification, Verification Agent scrutiny, Confidence Scoring, Evidence-Linked Reporting, and the SOC Dashboard. Look closely at the Verification Agent on the bottom left: it evaluates four distinct corroboration signals: static rule context, an unsupervised Isolation Forest anomaly score, historical host behavioral baselines, and semantic SHAP consistency. Based on these signals, it outputs CONFIRM, REDUCE, or REJECT. Alerts that are rejected are filtered as verified false positives and logged for audit without fatiguing the analyst. The remaining alerts receive a composite score C combining detection probability, verification agreement, and rule context, categorizing them into High, Medium, or Low priority bands.",
+    10: "Finally, on slide 10, we present a systematic performance comparison between existing methodologies and TRUST-SOC. Traditional signature-based systems like Snort are fast but flood analysts with false alarms and miss zero-day variants. Standalone ML classifiers achieve good benchmark scores but have zero second-line defense and remain opaque black boxes. Recent multi-agent LLM systems like CORTEX successfully reduce false positives, but they are cost-prohibitive, non-reproducible, and tethered to proprietary enterprise logs. TRUST-SOC delivers the best of both worlds: it provides the false-positive reduction of a two-agent architecture, active explainability via SHAP consistency checks, automated audit trails, and an analyst-centric dashboard, all built on a fast, lightweight, and 100% reproducible open-source stack. Thank you, and we now welcome questions from the honorable panel."
+  };
+
+  let currentSlide = 1;
+  const totalSlides = 10;
+  const slides = document.querySelectorAll('.slide');
+
+  function showSlide(n) {
+    if (n < 1) currentSlide = 1;
+    else if (n > totalSlides) currentSlide = totalSlides;
+    else currentSlide = n;
+
+    slides.forEach(s => s.classList.remove('active'));
+    document.querySelector(`.slide[data-slide="${currentSlide}"]`).classList.add('active');
+
+    document.getElementById('slideCounter').innerText = `Slide ${currentSlide} of ${totalSlides}`;
+    document.getElementById('notesContent').innerText = notes[currentSlide];
+    document.querySelector('#speaker-notes strong').innerText = `SPEAKER NOTES (Slide ${currentSlide}):`;
+  }
+
+  function nextSlide() { showSlide(currentSlide + 1); }
+  function prevSlide() { showSlide(currentSlide - 1); }
+
+  function toggleFullScreen() {
+    const elem = document.getElementById('presentation-container');
+    if (!document.fullscreenElement) {
+      elem.requestFullscreen().catch(err => alert(`Error attempting fullscreen: ${err.message}`));
+    } else {
+      document.exitFullscreen();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') nextSlide();
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') prevSlide();
+    if (e.key === 'f' || e.key === 'F') toggleFullScreen();
+  });
+</script>
+</body>
+</html>

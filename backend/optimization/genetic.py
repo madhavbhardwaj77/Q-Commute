@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import math
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
@@ -273,3 +273,168 @@ class GeneticRouter:
             "iterations": self.n_iter, "population": self.pop_size,
             "error": msg,
         }
+
+
+# ---------------------------------------------------------------------------
+# Multi-Vehicle VRP GA Solver
+# ---------------------------------------------------------------------------
+
+def solve_vrp_ga(
+    instance: Any,
+    weights: Optional[Dict[str, float]] = None,
+    generations: Optional[int] = None,
+    population_size: Optional[int] = None,
+    seed: Optional[int] = None,
+    callback: Optional[Callable[[int, float], None]] = None,
+) -> Any:
+    """
+    Solve a multi-vehicle VRP instance using a Genetic Algorithm.
+
+    Reuses permutation representation with vehicle split markers, tournament
+    selection, Order Crossover (OX), swap/inversion mutations, and elitism.
+
+    Args:
+        instance: VRPInstance defining stops, vehicles, and depot.
+        weights: Objective weights for time, distance, congestion.
+        generations: Number of GA generations.
+        population_size: Population size.
+        seed: Random seed for reproducibility.
+
+    Returns:
+        VRPSolution with best routes, fitness, violations, and convergence curve.
+    """
+    from backend.optimization.fitness import vrp_fitness
+    from backend.optimization.vrp_models import VRPSolution
+    from backend.optimization.qpso import (
+        _VRPSplitMarker,
+        _decode_vrp_chromosome,
+        _encode_vrp_chromosome,
+        _vrp_order_crossover,
+        _vrp_mutate,
+        _nearest_neighbor_vrp,
+    )
+
+    n_gen = generations if generations is not None and generations > 0 else 50
+    pop_size = population_size if population_size is not None and population_size > 0 else 30
+    rng = np.random.default_rng(seed if seed is not None else 42)
+
+    customer_stops = [s.id for s in instance.stops if s.id != instance.depot_id]
+    vehicle_ids = [v.id for v in instance.vehicles]
+
+    if not customer_stops:
+        empty_sol = VRPSolution(routes={v: [] for v in vehicle_ids})
+        fitness, violations = vrp_fitness(empty_sol, instance, weights)
+        empty_sol.fitness = fitness
+        empty_sol.violations = violations
+        return empty_sol
+
+    if not vehicle_ids:
+        return VRPSolution()
+
+    num_vehicles = len(vehicle_ids)
+    base_delims = [_VRPSplitMarker(i) for i in range(1, num_vehicles)]
+    all_genes = customer_stops + base_delims
+
+    # Population initialization
+    population: List[List[Any]] = []
+
+    # Individual 0: Nearest-neighbor heuristic
+    nn_routes = _nearest_neighbor_vrp(instance)
+    population.append(_encode_vrp_chromosome(nn_routes, vehicle_ids))
+
+    # Individual 1: Balanced partition
+    if pop_size > 1:
+        shuffled = list(customer_stops)
+        rng.shuffle(shuffled)
+        balanced_routes: Dict[Any, List[Any]] = {v: [] for v in vehicle_ids}
+        for idx, cid in enumerate(shuffled):
+            balanced_routes[vehicle_ids[idx % num_vehicles]].append(cid)
+        population.append(_encode_vrp_chromosome(balanced_routes, vehicle_ids))
+
+    # Remaining individuals: Random permutations
+    while len(population) < pop_size:
+        p = list(all_genes)
+        rng.shuffle(p)
+        population.append(p)
+
+    def _eval(chrom: List[Any]) -> Tuple[float, VRPSolution]:
+        routes = _decode_vrp_chromosome(chrom, vehicle_ids)
+        sol = VRPSolution(routes=routes)
+        fit, violations = vrp_fitness(sol, instance, weights)
+        sol.fitness = fit
+        sol.violations = violations
+        return fit, sol
+
+    fitnesses: List[float] = []
+    solutions: List[VRPSolution] = []
+    for chrom in population:
+        f, s = _eval(chrom)
+        fitnesses.append(f)
+        solutions.append(s)
+
+    best_idx = int(np.argmin(fitnesses))
+    best_chrom = list(population[best_idx])
+    best_fitness = fitnesses[best_idx]
+    best_solution = solutions[best_idx]
+
+    convergence: List[Dict[str, Any]] = [
+        {"iteration": 0, "best_cost": round(best_fitness, 6)}
+    ]
+    if callback is not None:
+        try:
+            callback(0, float(best_fitness))
+        except Exception as e:
+            pass
+
+    for gen in range(1, n_gen + 1):
+        new_population: List[List[Any]] = []
+        new_fitnesses: List[float] = []
+        new_solutions: List[VRPSolution] = []
+
+        # Elitism: Keep top 2 individuals
+        sorted_indices = np.argsort(fitnesses)
+        for elitism_idx in sorted_indices[: min(2, len(population))]:
+            new_population.append(list(population[elitism_idx]))
+            new_fitnesses.append(fitnesses[elitism_idx])
+            new_solutions.append(solutions[elitism_idx])
+
+        # Breed rest of population
+        while len(new_population) < pop_size:
+            # Tournament selection (k=3)
+            p1_idx = int(rng.choice(len(population)))
+            p2_idx = int(rng.choice(len(population)))
+            p3_idx = int(rng.choice(len(population)))
+            parent_a = population[min([p1_idx, p2_idx, p3_idx], key=lambda idx: fitnesses[idx])]
+
+            q1_idx = int(rng.choice(len(population)))
+            q2_idx = int(rng.choice(len(population)))
+            q3_idx = int(rng.choice(len(population)))
+            parent_b = population[min([q1_idx, q2_idx, q3_idx], key=lambda idx: fitnesses[idx])]
+
+            child = _vrp_order_crossover(parent_a, parent_b, rng)
+            child = _vrp_mutate(child, rng, mutation_rate=0.35)
+
+            fit, sol = _eval(child)
+            new_population.append(child)
+            new_fitnesses.append(fit)
+            new_solutions.append(sol)
+
+            if fit < best_fitness:
+                best_fitness = fit
+                best_chrom = list(child)
+                best_solution = sol
+
+        population = new_population
+        fitnesses = new_fitnesses
+        solutions = new_solutions
+
+        convergence.append({"iteration": gen, "best_cost": round(best_fitness, 6)})
+        if callback is not None:
+            try:
+                callback(gen, float(best_fitness))
+            except Exception as e:
+                pass
+
+    best_solution.fitness = best_fitness
+    best_solution.convergence = convergence
+    return best_solution

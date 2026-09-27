@@ -36,6 +36,8 @@ class OptimizeRequest(BaseModel):
     weight_time:    float = 0.5
     weight_dist:    float = 0.3
     weight_cong:    float = 0.2
+    profile:        Optional[Literal["delivery", "emergency", "vip", "custom"]] = "custom"
+    custom_weights: Optional[Dict[str, float]] = None
 
     @field_validator("source_id", "destination_id")
     @classmethod
@@ -180,9 +182,20 @@ async def optimize_route(req: OptimizeRequest) -> RouteResult:
         src = graph_state.get_node(req.source_id)
         dst = graph_state.get_node(req.destination_id)
         custom_refs = dict(graph_state._ref)
-        custom_refs["weight_time"] = req.weight_time
-        custom_refs["weight_dist"] = req.weight_dist
-        custom_refs["weight_cong"] = req.weight_cong
+
+        from backend.optimization.profiles import resolve_profile_weights
+        resolved = resolve_profile_weights(
+            profile=req.profile,
+            custom_weights=req.custom_weights or {
+                "weight_time": req.weight_time,
+                "weight_dist": req.weight_dist,
+                "weight_cong": req.weight_cong,
+            },
+        )
+        custom_refs["weight_time"] = resolved["time"]
+        custom_refs["weight_dist"] = resolved["distance"]
+        custom_refs["weight_cong"] = resolved["congestion"]
+        custom_refs["profile"] = resolved.get("profile", "custom")
 
         raw = _run_algorithm(
             req.source_id, req.destination_id,

@@ -23,6 +23,9 @@ from backend.routers import network as network_router
 from backend.routers import benchmark as benchmark_router
 from backend.routers import history as history_router
 from backend.routers import analytics as analytics_router
+from backend.routers import fleet as fleet_router
+from backend.routers import orchestrator as orchestrator_router
+from backend.routers import quantum as quantum_router
 
 logging.basicConfig(
     level  = logging.INFO,
@@ -84,6 +87,9 @@ app.include_router(network_router.router)
 app.include_router(benchmark_router.router)
 app.include_router(history_router.router)
 app.include_router(analytics_router.router)
+app.include_router(fleet_router.router)
+app.include_router(orchestrator_router.router)
+app.include_router(quantum_router.router)
 
 # Convenience root-level locations endpoint
 _convenience = APIRouter()

@@ -30,20 +30,41 @@ VALID_ALGOS = {"QPSO", "Dijkstra", "Genetic Algorithm"}
 
 
 class BenchmarkRequest(BaseModel):
-    source_id:      str
-    destination_id: str
-    algorithms:     List[str] = ["QPSO", "Dijkstra", "Genetic Algorithm"]
-    n_particles:    int = 20
-    n_iter:         int = 40
-    weight_time:    float = 0.5
-    weight_dist:    float = 0.3
-    weight_cong:    float = 0.2
+    source_id:        str
+    destination_id:   Optional[str] = None
+    destination_ids:  Optional[List[str]] = None
+    optimize_order:   bool = True
+    round_trip:       bool = False
+    algorithms:       List[str] = ["QPSO", "Dijkstra", "Genetic Algorithm"]
+    n_particles:      int = 20
+    n_iter:           int = 40
+    weight_time:      float = 0.5
+    weight_dist:      float = 0.3
+    weight_cong:      float = 0.2
 
-    @field_validator("source_id", "destination_id")
+    @field_validator("source_id")
     @classmethod
-    def must_be_known(cls, v: str) -> str:
+    def must_be_known_source(cls, v: str) -> str:
         if v not in LOCATION_MAP:
             raise ValueError(f"Unknown location id '{v}'")
+        return v
+
+    @field_validator("destination_id")
+    @classmethod
+    def must_be_known_destination(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in LOCATION_MAP:
+            raise ValueError(f"Unknown location id '{v}'")
+        return v
+
+    @field_validator("destination_ids")
+    @classmethod
+    def must_be_known_destinations(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None:
+            if not v:
+                raise ValueError("destination_ids cannot be empty if specified.")
+            for d in v:
+                if d not in LOCATION_MAP:
+                    raise ValueError(f"Unknown location id '{d}'")
         return v
 
     @field_validator("algorithms")
@@ -78,11 +99,13 @@ class BenchmarkWinner(BaseModel):
 
 
 class BenchmarkResponse(BaseModel):
-    source_id:      str
-    destination_id: str
-    results:        List[AlgoResult]
-    winner:         BenchmarkWinner
-    improvement:    Dict[str, float]   # QPSO improvement % over Dijkstra
+    source_id:        str
+    destination_id:   str
+    destination_ids:  Optional[List[str]] = None
+    ordered_stops:    Optional[List[str]] = None
+    results:          List[AlgoResult]
+    winner:           BenchmarkWinner
+    improvement:      Dict[str, float]   # QPSO improvement % over Dijkstra
 
 
 def _run_one(algo: str, src_id: str, dst_id: str, G, src, dst, ovl, refs,
@@ -132,16 +155,65 @@ def _run_one(algo: str, src_id: str, dst_id: str, G, src, dst, ovl, refs,
         )
 
 
+def _run_multi_one(algo: str, ordered_sequence: List[str], n_particles: int, n_iter: int, refs: dict) -> AlgoResult:
+    """Run one algorithm on multiple destination legs."""
+    from backend.routers.route import _run_multi_legs
+    try:
+        raw = _run_multi_legs(ordered_sequence, algo, n_particles, n_iter, refs_override=refs)
+        path = raw.get("path") or []
+        conv = raw.get("convergence") or []
+        iter_to_conv = None
+        if conv and len(conv) > 1:
+            final_c = conv[-1]["best_cost"]
+            for item in conv:
+                if abs(item["best_cost"] - final_c) <= 1e-3 * max(1.0, final_c):
+                    iter_to_conv = item["iteration"]
+                    break
+        elif algo == "Dijkstra":
+            iter_to_conv = 1
+
+        return AlgoResult(
+            algorithm              = algo,
+            valid                  = raw.get("valid", False),
+            coordinates            = raw.get("coordinates") or [],
+            distance_m             = raw.get("distance_m", 0.0),
+            travel_time_s          = raw.get("travel_time_s", 0.0),
+            total_cost             = raw.get("total_cost", 0.0),
+            runtime_ms             = raw.get("runtime_ms", 0.0),
+            path_length            = len(path),
+            iterations_to_converge = iter_to_conv,
+            convergence            = conv,
+        )
+    except Exception as e:
+        log.warning("Multi-dest benchmark error for %s: %s", algo, e)
+        return AlgoResult(
+            algorithm=algo, valid=False, coordinates=[],
+            distance_m=0, travel_time_s=0, total_cost=0, runtime_ms=0,
+            path_length=0, iterations_to_converge=None, error=str(e)
+        )
+
+
 @router.post("/compare", response_model=BenchmarkResponse)
 async def compare_algorithms(req: BenchmarkRequest) -> BenchmarkResponse:
     """
-    Run multiple algorithms on the same source->destination and compare results.
+    Run multiple algorithms on the same route (single or multi-destination) and compare results.
     Returns a unified comparison object for the analytics dashboard benchmark tab.
     """
     if not graph_state._initialized:
         raise HTTPException(503, "Graph not yet initialized.")
 
-    if req.source_id == req.destination_id:
+    if req.destination_ids and len(req.destination_ids) > 0:
+        dest_list = [d for d in req.destination_ids if d != req.source_id]
+        seen = set()
+        dest_list = [d for d in dest_list if not (d in seen or seen.add(d))]
+    elif req.destination_id:
+        if req.source_id == req.destination_id:
+            raise HTTPException(400, "Source and destination must be different.")
+        dest_list = [req.destination_id]
+    else:
+        raise HTTPException(400, "Must provide destination_id or destination_ids.")
+
+    if not dest_list:
         raise HTTPException(400, "Source and destination must be different.")
 
     G    = graph_state.G
@@ -150,14 +222,36 @@ async def compare_algorithms(req: BenchmarkRequest) -> BenchmarkResponse:
     refs["weight_time"] = req.weight_time
     refs["weight_dist"] = req.weight_dist
     refs["weight_cong"] = req.weight_cong
-    src  = graph_state.get_node(req.source_id)
-    dst  = graph_state.get_node(req.destination_id)
+
+    is_multi = len(dest_list) > 1 or req.round_trip
 
     results = []
-    for algo in req.algorithms:
-        r = _run_one(algo, req.source_id, req.destination_id, G, src, dst, ovl, refs,
-                     req.n_particles, req.n_iter)
-        results.append(r)
+    ordered_sequence = None
+    final_dst = dest_list[0]
+
+    if not is_multi:
+        src = graph_state.get_node(req.source_id)
+        dst = graph_state.get_node(dest_list[0])
+        for algo in req.algorithms:
+            r = _run_one(algo, req.source_id, dest_list[0], G, src, dst, ovl, refs,
+                         req.n_particles, req.n_iter)
+            results.append(r)
+    else:
+        from backend.routers.route import _optimize_destination_order
+        if req.optimize_order:
+            ordered_sequence = _optimize_destination_order(
+                req.source_id, dest_list, req.round_trip, G, ovl, refs
+            )
+        else:
+            ordered_sequence = [req.source_id] + dest_list
+            if req.round_trip:
+                ordered_sequence.append(req.source_id)
+
+        final_dst = ordered_sequence[-1]
+
+        for algo in req.algorithms:
+            r = _run_multi_one(algo, ordered_sequence, req.n_particles, req.n_iter, refs)
+            results.append(r)
 
     valid_results = [r for r in results if r.valid]
 
@@ -199,7 +293,9 @@ async def compare_algorithms(req: BenchmarkRequest) -> BenchmarkResponse:
 
     resp = BenchmarkResponse(
         source_id      = req.source_id,
-        destination_id = req.destination_id,
+        destination_id = final_dst,
+        destination_ids= dest_list if is_multi else None,
+        ordered_stops  = ordered_sequence if is_multi else [req.source_id, dest_list[0]],
         results        = results,
         winner         = winner,
         improvement    = improvement,
@@ -208,7 +304,7 @@ async def compare_algorithms(req: BenchmarkRequest) -> BenchmarkResponse:
     try:
         from backend.db.database import save_benchmark
         save_benchmark(
-            req.source_id, req.destination_id,
+            req.source_id, final_dst,
             winner.lowest_cost, winner.fastest_time,
             [r.model_dump() for r in results]
         )

@@ -7,14 +7,18 @@ import AnalyticsDashboard from './components/AnalyticsDashboard';
 import MatplotlibModal from './components/MatplotlibModal';
 import FleetSetup from './components/FleetSetup';
 import FleetResults from './components/FleetResults';
-import ScenarioOrchestratorView from './components/ScenarioOrchestratorView';
+import AlgorithmBenchmarkView from './components/AlgorithmBenchmarkView';
+import BenchmarkAnalysisDashboard from './components/BenchmarkAnalysisDashboard';
 import { API } from './api';
 
 export default function App() {
   const [locations, setLocations] = useState([]);
   const [sourceId, setSourceId] = useState('');
   const [destinationId, setDestinationId] = useState('');
-  const [algorithm, setAlgorithm] = useState('QPSO');
+  const [destinationIds, setDestinationIds] = useState([]);
+  const [optimizeOrder, setOptimizeOrder] = useState(true);
+  const [roundTrip, setRoundTrip] = useState(false);
+  const [algorithm, setAlgorithm] = useState('AI Orchestrator');
   const [particles, setParticles] = useState(20);
   const [iterations, setIterations] = useState(40);
   const [weights, setWeights] = useState({ time: 0.5, dist: 0.3, cong: 0.2 });
@@ -63,8 +67,11 @@ export default function App() {
   const [fleetLoading, setFleetLoading] = useState(false);
   const [liveConvergence, setLiveConvergence] = useState([]);
 
-  // AI Orchestrator mode — active route from scenario optimization
-  const [scenarioMapRoute, setScenarioMapRoute] = useState(null);
+  // Algorithm Benchmarking state — suite results & active map route
+  const [benchmarkSuiteResult, setBenchmarkSuiteResult] = useState(null);
+  const [benchmarkMapRoute, setBenchmarkMapRoute] = useState(null);
+  const [activeBenchmarkAlgo, setActiveBenchmarkAlgo] = useState(null);
+  const [benchmarkLoading, setBenchmarkLoading] = useState(false);
 
 
   // Load locations and graph properties on initial mount
@@ -87,6 +94,7 @@ export default function App() {
         if (locs.length >= 2) {
           setSourceId(locs[0].id);
           setDestinationId(locs[1].id);
+          setDestinationIds([locs[1].id]);
         }
       } catch (err) {
         console.error('Initialization error:', err);
@@ -95,32 +103,82 @@ export default function App() {
     startup();
   }, []);
 
+  const handleDestinationChange = (index, newDestId) => {
+    setDestinationIds((prev) => {
+      const next = [...prev];
+      next[index] = newDestId;
+      if (index === 0) setDestinationId(newDestId);
+      return next;
+    });
+  };
+
+  const handleAddDestination = () => {
+    const existing = new Set([sourceId, ...destinationIds]);
+    const candidate = locations.find((l) => !existing.has(l.id)) || locations[0];
+    if (candidate) {
+      setDestinationIds((prev) => [...prev, candidate.id]);
+    }
+  };
+
+  const handleRemoveDestination = (index) => {
+    if (destinationIds.length <= 1) return;
+    setDestinationIds((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (index === 0 && next.length > 0) setDestinationId(next[0]);
+      return next;
+    });
+  };
+
+  const handleReorderDestinations = (fromIdx, toIdx) => {
+    if (toIdx < 0 || toIdx >= destinationIds.length) return;
+    setDestinationIds((prev) => {
+      const next = [...prev];
+      const [item] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, item);
+      if (toIdx === 0 || fromIdx === 0) setDestinationId(next[0]);
+      return next;
+    });
+  };
+
   const handleSwap = () => {
-    const tmp = sourceId;
-    setSourceId(destinationId);
-    setDestinationId(tmp);
+    if (destinationIds.length <= 1) {
+      const tmp = sourceId;
+      setSourceId(destinationId);
+      setDestinationId(tmp);
+      setDestinationIds([tmp]);
+    } else {
+      const firstDest = destinationIds[0];
+      const newDests = [sourceId, ...destinationIds.slice(1)];
+      setSourceId(firstDest);
+      setDestinationId(newDests[0]);
+      setDestinationIds(newDests);
+    }
   };
 
   const handleWeightChange = (key, val) => {
     setWeights((prev) => ({ ...prev, [key]: val }));
   };
 
-  // Optimize Route
+  // Optimize Route (Single or Multi-Destination)
   const handleOptimize = async () => {
-    if (!sourceId || !destinationId || sourceId === destinationId) return;
+    const dests = destinationIds.length > 0 ? destinationIds : (destinationId ? [destinationId] : []);
+    if (!sourceId || dests.length === 0) return;
     setLoading(true);
     setComparisonRoutes(null);
     setActiveTab('metrics');
     try {
       const res = await API.optimize(
         sourceId,
-        destinationId,
+        dests[0],
         algorithm,
         particles,
         iterations,
         weights.time,
         weights.dist,
-        weights.cong
+        weights.cong,
+        dests,
+        optimizeOrder,
+        roundTrip
       );
       if (res.valid) {
         if (activeRoute) {
@@ -136,21 +194,25 @@ export default function App() {
     }
   };
 
-  // Run Benchmark
+  // Run Benchmark (Single or Multi-Destination)
   const handleBenchmark = async () => {
-    if (!sourceId || !destinationId || sourceId === destinationId) return;
+    const dests = destinationIds.length > 0 ? destinationIds : (destinationId ? [destinationId] : []);
+    if (!sourceId || dests.length === 0) return;
     setLoading(true);
     setActiveTab('benchmark');
     try {
       const data = await API.benchmark(
         sourceId,
-        destinationId,
+        dests[0],
         ['QPSO', 'Dijkstra', 'Genetic Algorithm'],
         particles,
         iterations,
         weights.time,
         weights.dist,
-        weights.cong
+        weights.cong,
+        dests,
+        optimizeOrder,
+        roundTrip
       );
       setBenchmarkData(data);
 
@@ -170,11 +232,12 @@ export default function App() {
 
   // Apply Traffic Event
   const handleApplyTraffic = async () => {
-    if (!sourceId || !destinationId) return;
+    const finalDest = destinationIds.length > 0 ? destinationIds[destinationIds.length - 1] : destinationId;
+    if (!sourceId || !finalDest) return;
     setLoading(true);
     try {
       const path = activeRoute?.path || [];
-      const res = await API.simulateTraffic(eventType, severity, sourceId, destinationId, path);
+      const res = await API.simulateTraffic(eventType, severity, sourceId, finalDest, path);
       if (res.success) {
         setTrafficIncident(res);
         setActiveEvents((prev) => [res, ...prev]);
@@ -186,21 +249,25 @@ export default function App() {
     }
   };
 
-  // Dynamic Reroute
+  // Dynamic Reroute (Single or Multi-Destination)
   const handleReroute = async () => {
-    if (!sourceId || !destinationId) return;
+    const dests = destinationIds.length > 0 ? destinationIds : (destinationId ? [destinationId] : []);
+    if (!sourceId || dests.length === 0) return;
     setLoading(true);
     setActiveTab('metrics');
     try {
       const res = await API.reroute(
         sourceId,
-        destinationId,
+        dests[0],
         algorithm,
         particles,
         iterations,
         weights.time,
         weights.dist,
-        weights.cong
+        weights.cong,
+        dests,
+        optimizeOrder,
+        roundTrip
       );
       if (res.new_route?.valid) {
         setPreviousRoute(activeRoute || res.previous_route);
@@ -265,10 +332,8 @@ export default function App() {
       previous_solution: fleetResult?.routes,
     };
 
-    // If small single-vehicle instance under orchestrator, exact solver runs immediately
-    const isSmallExact = fleetParams.useOrchestrator !== false && fleetParams.stops.length <= 10 && fleetParams.numVehicles === 1;
-
-    if (isSmallExact) {
+    // If user selected AI Orchestrator:
+    if (fleetParams.useOrchestrator !== false) {
       try {
         const res = await API.solveOrchestrator(payload);
         setFleetResult(res);
@@ -280,7 +345,22 @@ export default function App() {
       return;
     }
 
-    // Stream live convergence via WebSocket with HTTP fallback
+    const algoUpper = (fleetParams.algorithm || '').toUpperCase();
+    const isDirectSolver = algoUpper.includes('EXACT') || algoUpper.includes('ANNEAL') || algoUpper.includes('QAOA');
+
+    if (isDirectSolver) {
+      try {
+        const res = await API.optimizeFleet(payload);
+        setFleetResult(res);
+      } catch (e) {
+        console.error('Fleet optimization error:', e);
+      } finally {
+        setFleetLoading(false);
+      }
+      return;
+    }
+
+    // Stream live convergence via WebSocket for swarm/metaheuristic solvers (QPSO, GA)
     try {
       API.streamFleetOptimize(
         payload,
@@ -328,6 +408,9 @@ export default function App() {
 
   const sourceLoc = locations.find((l) => l.id === sourceId);
   const destLoc = locations.find((l) => l.id === destinationId);
+  const destinationLocs = destinationIds
+    .map((id) => locations.find((l) => l.id === id))
+    .filter(Boolean);
 
   return (
     <div className="flex flex-col h-screen w-screen bg-base-200 text-base-content overflow-hidden font-sans">
@@ -343,7 +426,7 @@ export default function App() {
             }`}
             onClick={() => setMode('single')}
           >
-            🚗 Single-Route Optimization
+            🚗 Route Optimization
           </button>
           <button
             type="button"
@@ -352,24 +435,24 @@ export default function App() {
             }`}
             onClick={() => setMode('fleet')}
           >
-            🚚 Multi-Vehicle VRP Mode
+            🚚 Multi-Vehicle Route Optimization
           </button>
           <button
             type="button"
             className={`tab tab-sm font-bold text-xs rounded-md transition-all ${
-              mode === 'orchestrator' ? 'tab-active !bg-secondary !text-secondary-content shadow-sm' : 'text-base-content/70'
+              mode === 'benchmark' ? 'tab-active !bg-secondary !text-secondary-content shadow-sm' : 'text-base-content/70'
             }`}
-            onClick={() => setMode('orchestrator')}
+            onClick={() => setMode('benchmark')}
           >
-            🧠 AI Orchestrator & Quantum Benchmark
+            📊 Algorithm Benchmarking
           </button>
         </div>
         <div className="text-[11px] text-base-content/60 font-mono hidden md:block">
           {mode === 'single'
-            ? 'Point-A-to-B • QPSO vs GA vs Dijkstra • Traffic Congestion'
+            ? 'Point-to-Point & Multi-Stop • QPSO vs GA vs Dijkstra • Traffic Congestion'
             : mode === 'fleet'
             ? 'Multi-Vehicle Fleet • Capacity & Time-Window Constraints • QPSO Swarm'
-            : 'AI Scenario Analysis • Quantum vs Classical Benchmarking • NLP + Filters'}
+            : 'Comparative Performance Analysis • Classical, Exact & Quantum Solvers'}
         </div>
       </div>
 
@@ -383,12 +466,20 @@ export default function App() {
                 locations={locations}
                 sourceId={sourceId}
                 destinationId={destinationId}
+                destinationIds={destinationIds}
+                optimizeOrder={optimizeOrder}
+                roundTrip={roundTrip}
                 algorithm={algorithm}
                 particles={particles}
                 iterations={iterations}
                 weights={weights}
                 onSourceChange={setSourceId}
-                onDestinationChange={setDestinationId}
+                onDestinationChange={handleDestinationChange}
+                onAddDestination={handleAddDestination}
+                onRemoveDestination={handleRemoveDestination}
+                onReorderDestinations={handleReorderDestinations}
+                onOptimizeOrderChange={setOptimizeOrder}
+                onRoundTripChange={setRoundTrip}
                 onSwap={handleSwap}
                 onAlgorithmChange={setAlgorithm}
                 onParticlesChange={setParticles}
@@ -418,14 +509,23 @@ export default function App() {
               loading={fleetLoading}
               fleetParams={fleetParams}
               setFleetParams={setFleetParams}
+              locations={locations}
             />
           ) : (
-            /* AI Orchestrator & Quantum Benchmark Hub */
-            <ScenarioOrchestratorView
-              fleetParams={fleetParams}
+            /* Algorithm Benchmarking Control Panel */
+            <AlgorithmBenchmarkView
+              locations={locations}
+              onBenchmarkComplete={(result) => {
+                setBenchmarkSuiteResult(result);
+                if (result?.suggested_algorithm) {
+                  setActiveBenchmarkAlgo(result.suggested_algorithm);
+                }
+              }}
               onApplyRoute={(routeResult) => {
-                // Push route coordinates into the map as a fleet-style overlay
-                setScenarioMapRoute(routeResult);
+                setBenchmarkMapRoute(routeResult);
+                if (routeResult?.algorithm) {
+                  setActiveBenchmarkAlgo(routeResult.algorithm);
+                }
               }}
             />
           )}
@@ -436,18 +536,27 @@ export default function App() {
           <MapView
             sourceLoc={sourceLoc}
             destLoc={destLoc}
+            destinationLocs={destinationLocs}
             activeRoute={activeRoute}
             previousRoute={previousRoute}
             comparisonRoutes={comparisonRoutes}
             trafficIncident={trafficIncident}
-            isFleetMode={mode === 'fleet' || mode === 'orchestrator'}
+            isFleetMode={mode === 'fleet' || mode === 'benchmark'}
             fleetRoutes={
-              mode === 'orchestrator'
-                ? scenarioMapRoute?.route_coordinates
+              mode === 'benchmark'
+                ? benchmarkMapRoute?.route_coordinates
                 : fleetResult?.route_coordinates
             }
-            fleetStops={fleetParams.stops}
-            fleetDepotId={fleetParams.depotId}
+            fleetStops={
+              mode === 'benchmark'
+                ? (benchmarkMapRoute?.activeStops || benchmarkSuiteResult?.selectedStops || [])
+                : fleetParams.stops
+            }
+            fleetDepotId={
+              mode === 'benchmark'
+                ? (benchmarkSuiteResult?.sourceId || 'connaught_place')
+                : fleetParams.depotId
+            }
           />
         </div>
 
@@ -471,105 +580,23 @@ export default function App() {
               liveConvergence={liveConvergence}
             />
           ) : (
-            /* Orchestrator Mode: Route Metrics Summary Panel */
-            <div className="card bg-base-100 border border-base-300 p-3.5 shadow-sm flex flex-col gap-3 flex-1 overflow-y-auto">
-              <div className="flex items-center gap-2 border-b border-base-200 pb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-secondary">
-                  🧠 AI Orchestrator — Route Summary
-                </span>
-              </div>
-
-              {scenarioMapRoute ? (
-                <>
-                  {/* Algorithm Badge */}
-                  <div className="bg-secondary/10 border border-secondary/30 rounded-xl p-3 flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase text-secondary">Optimized By</span>
-                      <span className="badge badge-secondary badge-sm font-bold font-mono text-[10px]">
-                        {scenarioMapRoute.algorithm || scenarioMapRoute.solver_used || 'AI Recommended'}
-                      </span>
-                    </div>
-                    {scenarioMapRoute.solver_reason && (
-                      <p className="text-[10px] text-base-content/80 leading-relaxed">
-                        {scenarioMapRoute.solver_reason}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Key Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-base-200/60 rounded-xl p-2.5 border border-base-300 text-center">
-                      <div className="text-[9px] uppercase font-bold text-base-content/60 mb-0.5">Distance</div>
-                      <div className="text-sm font-black font-mono text-primary">
-                        {scenarioMapRoute.total_distance > 1000
-                          ? `${(scenarioMapRoute.total_distance / 1000).toFixed(2)} km`
-                          : `${scenarioMapRoute.total_distance?.toFixed(0)} m`}
-                      </div>
-                    </div>
-                    <div className="bg-base-200/60 rounded-xl p-2.5 border border-base-300 text-center">
-                      <div className="text-[9px] uppercase font-bold text-base-content/60 mb-0.5">Travel Time</div>
-                      <div className="text-sm font-black font-mono text-warning">
-                        {scenarioMapRoute.total_time?.toFixed(1)} s
-                      </div>
-                    </div>
-                    <div className="bg-base-200/60 rounded-xl p-2.5 border border-base-300 text-center">
-                      <div className="text-[9px] uppercase font-bold text-base-content/60 mb-0.5">Congestion</div>
-                      <div className="text-sm font-black font-mono text-error">
-                        {scenarioMapRoute.total_congestion?.toFixed(2)}
-                      </div>
-                    </div>
-                    <div className="bg-base-200/60 rounded-xl p-2.5 border border-base-300 text-center">
-                      <div className="text-[9px] uppercase font-bold text-base-content/60 mb-0.5">CO2</div>
-                      <div className="text-sm font-black font-mono text-success">
-                        {scenarioMapRoute.estimated_co2_kg?.toFixed(3)} kg
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Runtime */}
-                  <div className="bg-base-200/40 rounded-lg p-2 border border-base-200 flex items-center justify-between text-[10px]">
-                    <span className="text-base-content/70 font-bold">Solver Runtime</span>
-                    <span className="font-mono font-bold text-primary">
-                      {scenarioMapRoute.runtime_ms > 1000
-                        ? `${(scenarioMapRoute.runtime_ms / 1000).toFixed(2)} s`
-                        : `${scenarioMapRoute.runtime_ms?.toFixed(0)} ms`}
-                    </span>
-                  </div>
-
-                  {/* Per-Vehicle Routes */}
-                  {scenarioMapRoute.routes && Object.keys(scenarioMapRoute.routes).length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-[10px] font-bold uppercase text-base-content/70">Vehicle Routes</span>
-                      {Object.entries(scenarioMapRoute.routes).map(([vid, stops]) => (
-                        <div key={vid} className="bg-base-200/50 rounded-lg px-2.5 py-1.5 border border-base-300 text-[10px] flex flex-col gap-0.5">
-                          <span className="font-bold text-primary">{vid}</span>
-                          <span className="font-mono text-base-content/70 truncate">
-                            {Array.isArray(stops) ? stops.join(' → ') : '-'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Violations */}
-                  {scenarioMapRoute.violations?.length > 0 && (
-                    <div className="alert alert-warning py-1.5 px-2 rounded-lg text-[10px]">
-                      <span>⚠️ {scenarioMapRoute.violations.length} constraint violation(s) detected</span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center flex-1 text-center gap-2 py-8">
-                  <span className="text-4xl">🧠</span>
-                  <p className="text-[11px] text-base-content/60 max-w-[200px] leading-relaxed">
-                    Select a preset or type your scenario in the left panel, then click <b>Analyze Scenario & Optimize Route</b>.
-                  </p>
-                  <p className="text-[10px] text-secondary/80 font-mono">
-                    The AI Orchestrator will choose the optimal quantum or classical algorithm and render the route on the map.
-                  </p>
-                </div>
-              )}
-            </div>
+            /* Algorithm Benchmarking Dashboard */
+            <BenchmarkAnalysisDashboard
+              benchmarkResult={benchmarkSuiteResult}
+              loading={benchmarkLoading}
+              activeAlgo={activeBenchmarkAlgo}
+              onHighlightAlgo={(item) => {
+                setActiveBenchmarkAlgo(item.algorithm);
+                setBenchmarkMapRoute({
+                  algorithm: item.algorithm,
+                  total_distance: item.total_distance,
+                  total_time: item.total_time,
+                  route_coordinates: item.route_coordinates || {},
+                  routes: item.routes || {},
+                  activeStops: benchmarkSuiteResult?.selectedStops,
+                });
+              }}
+            />
           )}
         </div>
       </div>

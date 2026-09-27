@@ -29,46 +29,103 @@ export const API = {
   getLocations: () => apiFetch('GET', '/locations'),
   getGraphMetrics: () => apiFetch('GET', '/network/graph-metrics'),
 
-  optimize: (source_id, destination_id, algorithm, n_particles = 20, n_iter = 40, weight_time = 0.5, weight_dist = 0.3, weight_cong = 0.2) =>
-    apiFetch('POST', '/route/optimize', {
+  optimize: (
+    source_id,
+    destination_id,
+    algorithm,
+    n_particles = 20,
+    n_iter = 40,
+    weight_time = 0.5,
+    weight_dist = 0.3,
+    weight_cong = 0.2,
+    destination_ids = null,
+    optimize_order = true,
+    round_trip = false
+  ) => {
+    const payload = {
       source_id,
-      destination_id,
+      destination_id: destination_id || (destination_ids && destination_ids[0]),
       algorithm,
       n_particles,
       n_iter,
       weight_time,
       weight_dist,
       weight_cong,
-    }),
+      optimize_order,
+      round_trip,
+    };
+    if (destination_ids && destination_ids.length > 0) {
+      payload.destination_ids = destination_ids;
+    }
+    return apiFetch('POST', '/route/optimize', payload);
+  },
 
-  reroute: (source_id, destination_id, algorithm, n_particles = 20, n_iter = 40, weight_time = 0.5, weight_dist = 0.3, weight_cong = 0.2) =>
-    apiFetch('POST', '/route/reroute', {
+  reroute: (
+    source_id,
+    destination_id,
+    algorithm,
+    n_particles = 20,
+    n_iter = 40,
+    weight_time = 0.5,
+    weight_dist = 0.3,
+    weight_cong = 0.2,
+    destination_ids = null,
+    optimize_order = true,
+    round_trip = false
+  ) => {
+    const payload = {
       source_id,
-      destination_id,
+      destination_id: destination_id || (destination_ids && destination_ids[0]),
       algorithm,
       n_particles,
       n_iter,
       weight_time,
       weight_dist,
       weight_cong,
-    }),
+      optimize_order,
+      round_trip,
+    };
+    if (destination_ids && destination_ids.length > 0) {
+      payload.destination_ids = destination_ids;
+    }
+    return apiFetch('POST', '/route/reroute', payload);
+  },
 
   simulateTraffic: (event_type, severity, source_id, destination_id, current_route) =>
     apiFetch('POST', '/traffic/simulate', { event_type, severity, source_id, destination_id, current_route }),
 
   resetTraffic: () => apiFetch('POST', '/traffic/reset'),
 
-  benchmark: (source_id, destination_id, algorithms, n_particles = 20, n_iter = 40, weight_time = 0.5, weight_dist = 0.3, weight_cong = 0.2) =>
-    apiFetch('POST', '/benchmark/compare', {
+  benchmark: (
+    source_id,
+    destination_id,
+    algorithms,
+    n_particles = 20,
+    n_iter = 40,
+    weight_time = 0.5,
+    weight_dist = 0.3,
+    weight_cong = 0.2,
+    destination_ids = null,
+    optimize_order = true,
+    round_trip = false
+  ) => {
+    const payload = {
       source_id,
-      destination_id,
+      destination_id: destination_id || (destination_ids && destination_ids[0]),
       algorithms,
       n_particles,
       n_iter,
       weight_time,
       weight_dist,
       weight_cong,
-    }),
+      optimize_order,
+      round_trip,
+    };
+    if (destination_ids && destination_ids.length > 0) {
+      payload.destination_ids = destination_ids;
+    }
+    return apiFetch('POST', '/benchmark/compare', payload);
+  },
 
   // History & SQLite Endpoints
   getRouteHistory: (limit = 20) => apiFetch('GET', `/history/routes?limit=${limit}`),

@@ -50,6 +50,7 @@ const PIN_ICONS = {
 export default function MapView({
   sourceLoc,
   destLoc,
+  destinationLocs = [],
   activeRoute,
   previousRoute,
   comparisonRoutes,
@@ -64,6 +65,7 @@ export default function MapView({
   const layersRef = useRef({
     sourceMarker: null,
     destMarker: null,
+    destMarkers: [],
     currentRoute: null,
     prevRoute: null,
     comparison: [],
@@ -95,13 +97,21 @@ export default function MapView({
     };
   }, []);
 
-  // Update Markers (Single Route Mode)
+  // Update Markers (Route Optimization Mode)
   useEffect(() => {
     const map = mapInstance.current;
     if (!map || isFleetMode) return;
 
-    if (layersRef.current.sourceMarker) map.removeLayer(layersRef.current.sourceMarker);
-    if (layersRef.current.destMarker) map.removeLayer(layersRef.current.destMarker);
+    if (layersRef.current.sourceMarker) {
+      map.removeLayer(layersRef.current.sourceMarker);
+      layersRef.current.sourceMarker = null;
+    }
+    if (layersRef.current.destMarker) {
+      map.removeLayer(layersRef.current.destMarker);
+      layersRef.current.destMarker = null;
+    }
+    layersRef.current.destMarkers.forEach((m) => map.removeLayer(m));
+    layersRef.current.destMarkers = [];
 
     if (sourceLoc) {
       layersRef.current.sourceMarker = L.marker([sourceLoc.lat, sourceLoc.lon], { icon: PIN_ICONS.source })
@@ -109,12 +119,30 @@ export default function MapView({
         .addTo(map);
     }
 
-    if (destLoc) {
-      layersRef.current.destMarker = L.marker([destLoc.lat, destLoc.lon], { icon: PIN_ICONS.dest })
-        .bindTooltip(`<b>Destination:</b> ${destLoc.name}`, { direction: 'top' })
+    const destList = destinationLocs && destinationLocs.length > 0
+      ? destinationLocs
+      : (destLoc ? [destLoc] : []);
+
+    if (destList.length === 1) {
+      const d = destList[0];
+      layersRef.current.destMarker = L.marker([d.lat, d.lon], { icon: PIN_ICONS.dest })
+        .bindTooltip(`<b>Destination:</b> ${d.name}`, { direction: 'top' })
         .addTo(map);
+    } else if (destList.length > 1) {
+      destList.forEach((d, idx) => {
+        const markerIcon = L.divIcon({
+          className: '',
+          html: `<div style="background:#ef4444;color:white;width:22px;height:22px;border-radius:50%;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">${idx + 1}</div>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+        });
+        const marker = L.marker([d.lat, d.lon], { icon: markerIcon })
+          .bindTooltip(`<b>Stop ${idx + 1}:</b> ${d.name}`, { direction: 'top' })
+          .addTo(map);
+        layersRef.current.destMarkers.push(marker);
+      });
     }
-  }, [sourceLoc, destLoc, isFleetMode]);
+  }, [sourceLoc, destLoc, destinationLocs, isFleetMode]);
 
   // Update Active Route (Single Route Mode)
   useEffect(() => {
@@ -215,9 +243,11 @@ export default function MapView({
 
     if (!isFleetMode) return;
 
-    // Remove single route markers when in fleet mode
+    // Remove single/multi route markers when in fleet mode
     if (layersRef.current.sourceMarker) map.removeLayer(layersRef.current.sourceMarker);
     if (layersRef.current.destMarker) map.removeLayer(layersRef.current.destMarker);
+    layersRef.current.destMarkers.forEach((m) => map.removeLayer(m));
+    layersRef.current.destMarkers = [];
     if (layersRef.current.currentRoute) map.removeLayer(layersRef.current.currentRoute);
     if (layersRef.current.prevRoute) map.removeLayer(layersRef.current.prevRoute);
 

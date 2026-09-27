@@ -189,6 +189,9 @@ def solve_vrp_exact(
     else:
         log.warning("OR-Tools solver could not find a feasible solution within time limit.")
 
+    from backend.optimization.qpso import _balance_routes_across_fleet
+    routes = _balance_routes_across_fleet(routes, [v.id for v in instance.vehicles], instance)
+
     vrp_sol = VRPSolution(
         routes=routes,
         arrival_times=arrival_times if (has_tw or has_max_dur) else {},

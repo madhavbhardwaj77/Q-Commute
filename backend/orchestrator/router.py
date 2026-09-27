@@ -16,14 +16,23 @@ from backend.quantum.qaoa_subsolver import MAX_QAOA_STOPS, is_qaoa_available
 from backend.quantum.annealing_subsolver import is_annealing_available
 
 
+class DecisionStep(BaseModel):
+    step_number: int
+    title: str
+    detail: str
+    impact: str
+
+
 class DecisionRationale(BaseModel):
     selected_solver: str
     algorithm_display: str
     confidence: float
     scores: Dict[str, float] = Field(default_factory=dict)
     rationale: str
+    decision_steps: List[DecisionStep] = Field(default_factory=list)
     factors_applied: Dict[str, float] = Field(default_factory=dict)
     candidate_algorithms: List[str] = Field(default_factory=list)
+    scenario_summary: str = ""
 
 
 def evaluate_algorithm_suitability(
@@ -204,14 +213,49 @@ def select_solver_with_ai(
     if chosen_key in scores:
         confidence = round(max(confidence, scores[chosen_key]), 2)
 
+    decision_steps = [
+        DecisionStep(
+            step_number=1,
+            title="Scenario & Intent Analysis",
+            detail=f"Parsed user prompt & inputs: Urgency='{features.urgency}', Objective='{features.target_objective}', Latency='{features.latency_budget}'. Keywords: {', '.join(features.extracted_keywords) if features.extracted_keywords else 'standard routing'}.",
+            impact=f"Inferred weights -> Time: {int(features.weights.get('time', 0)*100)}%, Dist: {int(features.weights.get('dist', 0)*100)}%, Cong: {int(features.weights.get('cong', 0)*100)}%, CO2: {int(features.weights.get('emiss', 0)*100)}%",
+        ),
+        DecisionStep(
+            step_number=2,
+            title="Topology & Scale Classification",
+            detail=f"Instance scale: {n_stops} stops, {n_veh} vehicle(s). Checked mathematical feasibility boundaries.",
+            impact=f"QAOA limit (<= {MAX_QAOA_STOPS} stops): {'Eligible' if n_stops <= MAX_QAOA_STOPS else 'Excluded'}; Exact CP-SAT (<= 10 stops): {'Eligible' if n_stops <= 10 else 'Relaxed'}; QPSO/GA: Scalable.",
+        ),
+        DecisionStep(
+            step_number=3,
+            title="Candidate Suitability Scoring",
+            detail="Computed multi-criteria suitability scores across classical, exact, metaheuristic, and quantum paradigms.",
+            impact=f"Scores: {', '.join(f'{k.upper()}: {int(v*100)}%' for k, v in sorted(scores.items(), key=lambda x: x[1], reverse=True)[:4])}",
+        ),
+        DecisionStep(
+            step_number=4,
+            title="Solver Selection & Optimal Route Dispatch",
+            detail=f"Selected {display_names.get(chosen_key, chosen_key)} with {int(confidence*100)}% confidence as the best solver for this operational scenario.",
+            impact=f"Produces optimal route minimizing {features.target_objective.replace('_', ' ')} under active road conditions.",
+        ),
+    ]
+
+    scenario_summary = (
+        f"For a {n_stops}-stop scenario focused on '{features.target_objective.replace('_', ' ')}' with {features.latency_budget} latency, "
+        f"the orchestrator evaluated {len(scores)} solver options and recommended {display_names.get(chosen_key, chosen_key)} "
+        f"with {int(confidence*100)}% confidence."
+    )
+
     return DecisionRationale(
         selected_solver=chosen_key,
         algorithm_display=display_names.get(chosen_key, chosen_key),
         confidence=confidence,
         scores=scores,
         rationale=rationale,
+        decision_steps=decision_steps,
         factors_applied=features.weights,
         candidate_algorithms=list(scores.keys()),
+        scenario_summary=scenario_summary,
     )
 
 

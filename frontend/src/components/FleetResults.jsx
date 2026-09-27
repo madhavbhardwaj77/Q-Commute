@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle, Clock, Navigation, ShieldAlert, Award, Fuel, Leaf } from 'lucide-react';
+import { Clock, Navigation, Award, Fuel, Leaf } from 'lucide-react';
 import ConvergenceChart from './ConvergenceChart';
 
 const VEHICLE_COLORS = [
@@ -74,13 +74,11 @@ export default function FleetResults({ result, loading, liveConvergence = [] }) 
     total_time = 0,
     estimated_fuel_cost = 0,
     estimated_co2_kg = 0,
-    violations = [],
     fitness = 0,
     convergence = [],
   } = result;
 
   const vehicleIds = Object.keys(routes);
-  const hasViolations = violations && violations.length > 0;
 
   return (
     <div className="card bg-base-100 border border-base-300 shadow-sm p-4 flex flex-col gap-3 h-full overflow-y-auto">
@@ -118,26 +116,6 @@ export default function FleetResults({ result, loading, liveConvergence = [] }) 
               {result.runtime_ms.toFixed(1)} ms
             </span>
           )}
-        </div>
-      )}
-
-      {/* Constraints Status / Violations Alert Banner */}
-      {hasViolations ? (
-        <div className="alert alert-warning py-2.5 px-3 rounded-lg border border-warning/30 bg-warning/10 text-xs shadow-sm flex flex-col items-start gap-1">
-          <div className="flex items-center gap-1.5 font-bold text-warning-content">
-            <AlertTriangle size={15} className="text-warning flex-shrink-0" />
-            <span>{violations.length} Constraint Violation{violations.length > 1 ? 's' : ''} Detected</span>
-          </div>
-          <ul className="list-disc list-inside text-[11px] text-base-content/80 space-y-0.5 mt-0.5">
-            {violations.map((v, i) => (
-              <li key={i} className="font-mono text-error font-medium">{v}</li>
-            ))}
-          </ul>
-        </div>
-      ) : (
-        <div className="alert alert-success py-2 px-3 rounded-lg border border-success/30 bg-success/10 text-xs shadow-sm flex items-center gap-2 text-success-content">
-          <CheckCircle size={15} className="text-success flex-shrink-0" />
-          <span className="font-semibold text-[11px]">All Vehicle Capacity & Time-Window Constraints Satisfied</span>
         </div>
       )}
 

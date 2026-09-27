@@ -302,3 +302,56 @@ class TestHistoryEndpoints:
         assert "storage_engine" in data
         assert data["storage_engine"] == "SQLite 3"
 
+
+class TestMultiDestinationRoute:
+    def test_multi_destination_optimize(self, client):
+        payload = {
+            "source_id": "connaught_place",
+            "destination_ids": ["jantar_mantar", "india_gate"],
+            "algorithm": "Dijkstra",
+            "optimize_order": True,
+            "round_trip": False,
+        }
+        r = client.post("/route/optimize", json=payload)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["valid"] is True
+        assert data["is_multi_dest"] is True
+        assert len(data["legs"]) == 2
+        assert len(data["ordered_stops"]) == 3
+        assert data["ordered_stops"][0] == "connaught_place"
+        assert len(data["coordinates"]) > 2
+        assert data["distance_m"] > 0
+
+    def test_multi_destination_round_trip(self, client):
+        payload = {
+            "source_id": "connaught_place",
+            "destination_ids": ["jantar_mantar", "india_gate"],
+            "algorithm": "Dijkstra",
+            "optimize_order": False,
+            "round_trip": True,
+        }
+        r = client.post("/route/optimize", json=payload)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["valid"] is True
+        assert data["is_multi_dest"] is True
+        assert len(data["legs"]) == 3
+        assert data["ordered_stops"][-1] == "connaught_place"
+
+    def test_multi_destination_benchmark(self, client):
+        payload = {
+            "source_id": "connaught_place",
+            "destination_ids": ["jantar_mantar", "india_gate"],
+            "algorithms": ["Dijkstra"],
+            "optimize_order": True,
+            "round_trip": False,
+        }
+        r = client.post("/benchmark/compare", json=payload)
+        assert r.status_code == 200
+        data = r.json()
+        assert len(data["results"]) == 1
+        assert data["results"][0]["valid"] is True
+        assert data["destination_ids"] == ["jantar_mantar", "india_gate"]
+
+

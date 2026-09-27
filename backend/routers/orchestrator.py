@@ -117,6 +117,7 @@ class BenchmarkItem(BaseModel):
     fuel_cost: float = 0.0
     co2_kg: float = 0.0
     routes: Dict[str, List[Any]] = Field(default_factory=dict)
+    route_coordinates: Dict[str, List[List[float]]] = Field(default_factory=dict)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     error: Optional[str] = None
 
@@ -182,7 +183,7 @@ async def solve_with_orchestrator(payload: OrchestratorSolveRequest) -> Orchestr
         stops=domain_stops,
         vehicles=domain_vehicles,
         depot_id=payload.depot_id,
-        metric=payload.metric or "euclidean",
+        metric=payload.metric or "haversine",
     )
 
     # Resolve optimization weights according to profile
@@ -234,8 +235,14 @@ async def solve_with_orchestrator(payload: OrchestratorSolveRequest) -> Orchestr
 
     runtime_ms = (time.perf_counter() - t0) * 1000.0
 
+    from backend.optimization.qpso import _balance_routes_across_fleet
+    clean_routes = _balance_routes_across_fleet(
+        {str(k): list(v) for k, v in solution.routes.items()},
+        [v.id for v in instance.vehicles],
+        instance,
+    )
+    solution.routes = clean_routes
     fitness, violations = vrp_fitness(solution, instance, resolved_weights)
-    clean_routes = {str(k): list(v) for k, v in solution.routes.items()}
 
     # Compute coordinates and per-vehicle metrics
     depot_stop = instance.get_stop(payload.depot_id)
@@ -399,6 +406,26 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
     primary_response.solver_reason = decision.rationale
     primary_response.algorithm = decision.algorithm_display
 
+    depot_stop = instance.get_stop(depot_id)
+
+    def _extract_coords(routes_dict: Dict[str, List[Any]]) -> Dict[str, List[List[float]]]:
+        res = {}
+        for vid, sids in routes_dict.items():
+            pts = []
+            if not sids:
+                res[str(vid)] = []
+                continue
+            if str(sids[0]) != str(depot_id) and depot_stop:
+                pts.append([depot_stop.lat, depot_stop.lon])
+            for sid in sids:
+                st = instance.get_stop(sid)
+                if st:
+                    pts.append([st.lat, st.lon])
+            if str(sids[-1]) != str(depot_id) and depot_stop:
+                pts.append([depot_stop.lat, depot_stop.lon])
+            res[str(vid)] = pts
+        return res
+
     # 4. Multi-Algorithm Benchmarking
     benchmark_items: List[BenchmarkItem] = []
 
@@ -415,6 +442,7 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
             fuel_cost=primary_response.estimated_fuel_cost,
             co2_kg=primary_response.estimated_co2_kg,
             routes=primary_response.routes,
+            route_coordinates=primary_response.route_coordinates,
             metadata={"iterations": payload.iterations, "swarm_size": payload.swarm_size},
         )
     )
@@ -432,6 +460,7 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
         ga_dist = round(ga_sol.total_distance, 2)
         ga_fuel = compute_fuel_cost(ga_dist, payload.cost_per_km)
         ga_co2 = compute_co2_emissions(ga_dist, payload.emissions_factor_per_km)
+        ga_routes = {str(k): list(v) for k, v in ga_sol.routes.items()}
         benchmark_items.append(
             BenchmarkItem(
                 algorithm="Genetic Algorithm",
@@ -443,7 +472,8 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
                 runtime_ms=round(ga_ms, 2),
                 fuel_cost=ga_fuel,
                 co2_kg=ga_co2,
-                routes={str(k): list(v) for k, v in ga_sol.routes.items()},
+                routes=ga_routes,
+                route_coordinates=_extract_coords(ga_routes),
                 metadata={"generations": payload.iterations, "population": payload.swarm_size},
             )
         )
@@ -469,6 +499,7 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
             ex_dist = round(ex_sol.total_distance, 2)
             ex_fuel = compute_fuel_cost(ex_dist, payload.cost_per_km)
             ex_co2 = compute_co2_emissions(ex_dist, payload.emissions_factor_per_km)
+            ex_routes = {str(k): list(v) for k, v in ex_sol.routes.items()}
             benchmark_items.append(
                 BenchmarkItem(
                     algorithm="OR-Tools CP-SAT",
@@ -480,7 +511,8 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
                     runtime_ms=round(ex_ms, 2),
                     fuel_cost=ex_fuel,
                     co2_kg=ex_co2,
-                    routes={str(k): list(v) for k, v in ex_sol.routes.items()},
+                    routes=ex_routes,
+                    route_coordinates=_extract_coords(ex_routes),
                     metadata={"time_limit_seconds": 3, "optimality_gap": 0.0},
                 )
             )
@@ -524,6 +556,7 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
             qa_dist = round(float(qa_res.get("total_distance", 0.0)), 2)
             qa_fuel = compute_fuel_cost(qa_dist, payload.cost_per_km)
             qa_co2 = compute_co2_emissions(qa_dist, payload.emissions_factor_per_km)
+            qa_routes = {"v1": qa_res.get("tour", [])}
             benchmark_items.append(
                 BenchmarkItem(
                     algorithm="Quantum Annealing (Neal)",
@@ -535,7 +568,8 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
                     runtime_ms=round(qa_ms, 2),
                     fuel_cost=qa_fuel,
                     co2_kg=qa_co2,
-                    routes={"v1": qa_res.get("tour", [])},
+                    routes=qa_routes,
+                    route_coordinates=_extract_coords(qa_routes),
                     metadata={"num_reads": 80, "energy": qa_res.get("energy")},
                     error=qa_res.get("error"),
                 )
@@ -560,14 +594,15 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
                 qaoa_res = solve_cluster_qaoa(
                     stops=payload.stops,
                     depot_id=depot_id,
-                    timeout_seconds=8.0,
+                    timeout_seconds=2.5,
                     reps=1,
-                    maxiter=3,
+                    maxiter=2,
                 )
                 qaoa_ms = (time.perf_counter() - t_qaoa) * 1000.0
                 qaoa_dist = round(float(qaoa_res.get("total_distance", 0.0)), 2)
                 qaoa_fuel = compute_fuel_cost(qaoa_dist, payload.cost_per_km)
                 qaoa_co2 = compute_co2_emissions(qaoa_dist, payload.emissions_factor_per_km)
+                qaoa_routes = {"v1": qaoa_res.get("tour", [])}
                 benchmark_items.append(
                     BenchmarkItem(
                         algorithm="Gate-Model QAOA",
@@ -579,7 +614,8 @@ async def scenario_optimize(payload: ScenarioOptimizeRequest) -> ScenarioOptimiz
                         runtime_ms=round(qaoa_ms, 2),
                         fuel_cost=qaoa_fuel,
                         co2_kg=qaoa_co2,
-                        routes={"v1": qaoa_res.get("tour", [])},
+                        routes=qaoa_routes,
+                        route_coordinates=_extract_coords(qaoa_routes),
                         metadata={
                             "qubits": qaoa_res.get("qubits"),
                             "ansatz_depth": qaoa_res.get("ansatz_depth"),

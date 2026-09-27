@@ -312,6 +312,7 @@ def solve_vrp_ga(
         _vrp_order_crossover,
         _vrp_mutate,
         _nearest_neighbor_vrp,
+        _balance_routes_across_fleet,
     )
 
     n_gen = generations if generations is not None and generations > 0 else 50
@@ -358,7 +359,7 @@ def solve_vrp_ga(
         population.append(p)
 
     def _eval(chrom: List[Any]) -> Tuple[float, VRPSolution]:
-        routes = _decode_vrp_chromosome(chrom, vehicle_ids)
+        routes = _decode_vrp_chromosome(chrom, vehicle_ids, instance)
         sol = VRPSolution(routes=routes)
         fit, violations = vrp_fitness(sol, instance, weights)
         sol.fitness = fit
@@ -435,6 +436,9 @@ def solve_vrp_ga(
             except Exception as e:
                 pass
 
-    best_solution.fitness = best_fitness
+    best_solution.routes = _balance_routes_across_fleet(best_solution.routes, vehicle_ids, instance)
+    final_fit, final_viols = vrp_fitness(best_solution, instance, weights)
+    best_solution.fitness = final_fit
+    best_solution.violations = final_viols
     best_solution.convergence = convergence
     return best_solution

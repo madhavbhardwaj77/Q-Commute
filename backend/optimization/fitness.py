@@ -236,5 +236,13 @@ def vrp_fitness(
     unit_penalty = max(penalty_multiplier, 10.0 * float(base_cost))
     penalty = len(violations) * unit_penalty
 
+    # Add penalty for idle/empty vehicles when stops are plentiful
+    num_vehicles = len(instance.vehicles) if hasattr(instance, "vehicles") else 1
+    num_customers = len([s for s in instance.stops if s.id != getattr(instance, "depot_id", None)]) if hasattr(instance, "stops") else 0
+    if num_vehicles > 1 and num_customers >= num_vehicles and routes:
+        empty_vehicles = sum(1 for v_id, s_ids in routes.items() if len(s_ids) == 0)
+        if empty_vehicles > 0:
+            penalty += empty_vehicles * (unit_penalty * 0.5)
+
     fitness_score = float(base_cost + penalty)
     return fitness_score, violations

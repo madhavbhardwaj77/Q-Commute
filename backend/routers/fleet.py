@@ -57,7 +57,7 @@ class FleetOptimizeRequest(BaseModel):
     algorithm: Optional[str] = "QPSO"
     iterations: Optional[int] = 50
     swarm_size: Optional[int] = 30
-    metric: Optional[str] = "euclidean"
+    metric: Optional[str] = "haversine"
     cost_per_km: Optional[float] = DEFAULT_COST_PER_KM
     emissions_factor_per_km: Optional[float] = DEFAULT_CO2_PER_KM
 
@@ -88,6 +88,8 @@ class FleetOptimizeResponse(BaseModel):
     fitness: float
     profile: str = "custom"
     convergence: List[Dict[str, Any]] = Field(default_factory=list)
+    solver_used: Optional[str] = None
+    solver_reason: Optional[str] = None
 
 
 def _run_fleet_optimization(
@@ -136,7 +138,7 @@ def _run_fleet_optimization(
         stops=domain_stops,
         vehicles=domain_vehicles,
         depot_id=payload.depot_id,
-        metric=payload.metric or "euclidean",
+        metric=payload.metric or "haversine",
     )
 
     from backend.optimization.profiles import resolve_profile_weights
@@ -146,7 +148,36 @@ def _run_fleet_optimization(
     )
 
     algo = (payload.algorithm or "QPSO").upper()
-    if "GENETIC" in algo or algo == "GA":
+    solver_used = None
+    solver_reason = None
+
+    if "ORCHESTRATOR" in algo:
+        from backend.orchestrator.router import select_solver_with_ai
+        decision = select_solver_with_ai(instance, context={"urgency": "standard"})
+        solver_used = decision.selected_solver
+        solver_reason = decision.rationale
+        chosen_algo = decision.algorithm_display
+
+        if decision.selected_solver == "exact":
+            from backend.optimization.exact_solver import solve_vrp_exact
+            solution = solve_vrp_exact(instance, weights=resolved_weights, time_limit_seconds=5)
+        elif decision.selected_solver == "genetic":
+            solution = solve_vrp_ga(
+                instance=instance,
+                weights=resolved_weights,
+                generations=payload.iterations,
+                population_size=payload.swarm_size,
+                callback=callback,
+            )
+        else:
+            solution = solve_vrp_qpso(
+                instance=instance,
+                weights=resolved_weights,
+                iterations=payload.iterations,
+                swarm_size=payload.swarm_size,
+                callback=callback,
+            )
+    elif "GENETIC" in algo or algo == "GA":
         chosen_algo = "Genetic Algorithm"
         solution: VRPSolution = solve_vrp_ga(
             instance=instance,
@@ -155,6 +186,91 @@ def _run_fleet_optimization(
             population_size=payload.swarm_size,
             callback=callback,
         )
+    elif "EXACT" in algo or "OR-TOOLS" in algo or "OR_TOOLS" in algo or "CP-SAT" in algo:
+        chosen_algo = "OR-Tools CP-SAT (Exact)"
+        from backend.optimization.exact_solver import solve_vrp_exact, EXACT_SOLVER_MAX_STOPS
+        if len(instance.stops) <= EXACT_SOLVER_MAX_STOPS:
+            try:
+                solution = solve_vrp_exact(instance, weights=resolved_weights, time_limit_seconds=5)
+            except Exception as e:
+                log.warning("Exact solver failed, falling back to QPSO: %s", e)
+                chosen_algo = "QPSO (Exact fallback)"
+                solution = solve_vrp_qpso(
+                    instance=instance,
+                    weights=resolved_weights,
+                    iterations=payload.iterations,
+                    swarm_size=payload.swarm_size,
+                    callback=callback,
+                )
+        else:
+            chosen_algo = "QPSO (Exact stop limit exceeded)"
+            solution = solve_vrp_qpso(
+                instance=instance,
+                weights=resolved_weights,
+                iterations=payload.iterations,
+                swarm_size=payload.swarm_size,
+                callback=callback,
+            )
+    elif "ANNEAL" in algo:
+        chosen_algo = "Quantum Annealing (Neal QUBO)"
+        from backend.quantum.annealing_subsolver import is_annealing_available, solve_cluster_annealing, MAX_ANNEALING_STOPS
+        if is_annealing_available() and len(instance.stops) <= MAX_ANNEALING_STOPS + 2:
+            try:
+                qa_res = solve_cluster_annealing(stops=payload.stops, depot_id=payload.depot_id, num_reads=100)
+                tour = qa_res.get("tour", qa_res.get("ordered_stop_ids", []))
+                ordered_ids = [sid for sid in tour if sid != payload.depot_id]
+                from backend.optimization.qpso import _balance_routes_across_fleet
+                clean = _balance_routes_across_fleet({instance.vehicles[0].id: ordered_ids}, [v.id for v in instance.vehicles], instance)
+                solution = VRPSolution(routes=clean)
+            except Exception as e:
+                log.warning("Quantum annealing failed, falling back to QPSO: %s", e)
+                chosen_algo = "QPSO (Quantum Annealing fallback)"
+                solution = solve_vrp_qpso(
+                    instance=instance,
+                    weights=resolved_weights,
+                    iterations=payload.iterations,
+                    swarm_size=payload.swarm_size,
+                    callback=callback,
+                )
+        else:
+            chosen_algo = "QPSO (Quantum Annealing limit exceeded)"
+            solution = solve_vrp_qpso(
+                instance=instance,
+                weights=resolved_weights,
+                iterations=payload.iterations,
+                swarm_size=payload.swarm_size,
+                callback=callback,
+            )
+    elif "QAOA" in algo:
+        chosen_algo = "Gate-Model QAOA"
+        from backend.quantum.qaoa_subsolver import is_qaoa_available, solve_cluster_qaoa, MAX_QAOA_STOPS
+        if is_qaoa_available() and len(instance.stops) <= MAX_QAOA_STOPS:
+            try:
+                qaoa_res = solve_cluster_qaoa(stops=payload.stops, depot_id=payload.depot_id)
+                tour = qaoa_res.get("tour", qaoa_res.get("ordered_stop_ids", []))
+                ordered_ids = [sid for sid in tour if sid != payload.depot_id]
+                from backend.optimization.qpso import _balance_routes_across_fleet
+                clean = _balance_routes_across_fleet({instance.vehicles[0].id: ordered_ids}, [v.id for v in instance.vehicles], instance)
+                solution = VRPSolution(routes=clean)
+            except Exception as e:
+                log.warning("QAOA failed, falling back to QPSO: %s", e)
+                chosen_algo = "QPSO (QAOA fallback)"
+                solution = solve_vrp_qpso(
+                    instance=instance,
+                    weights=resolved_weights,
+                    iterations=payload.iterations,
+                    swarm_size=payload.swarm_size,
+                    callback=callback,
+                )
+        else:
+            chosen_algo = "QPSO (QAOA limit exceeded)"
+            solution = solve_vrp_qpso(
+                instance=instance,
+                weights=resolved_weights,
+                iterations=payload.iterations,
+                swarm_size=payload.swarm_size,
+                callback=callback,
+            )
     else:
         chosen_algo = "QPSO"
         solution = solve_vrp_qpso(
@@ -165,11 +281,15 @@ def _run_fleet_optimization(
             callback=callback,
         )
 
-    # Ensure fitness and violations are updated
+    # Ensure balanced fleet distribution and update fitness/violations
+    from backend.optimization.qpso import _balance_routes_across_fleet
+    clean_routes = _balance_routes_across_fleet(
+        {str(k): list(v) for k, v in solution.routes.items()},
+        [v.id for v in instance.vehicles],
+        instance,
+    )
+    solution.routes = clean_routes
     fitness, violations = vrp_fitness(solution, instance, resolved_weights)
-
-    # Convert routes keys to string for JSON compatibility
-    clean_routes = {str(k): list(v) for k, v in solution.routes.items()}
 
     # Compute coordinates and per-vehicle metrics
     depot_stop = instance.get_stop(payload.depot_id)
@@ -243,6 +363,8 @@ def _run_fleet_optimization(
         fitness=round(float(fitness), 4),
         profile=resolved_weights.get("profile", "custom"),
         convergence=getattr(solution, "convergence", []),
+        solver_used=solver_used,
+        solver_reason=solver_reason,
     )
 
 

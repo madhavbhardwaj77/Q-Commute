@@ -643,9 +643,76 @@ class _VRPSplitMarker:
         return hash(("VRPSplitMarker", self.idx))
 
 
+def _balance_routes_across_fleet(
+    routes: Dict[Any, List[Any]],
+    vehicle_ids: List[Any],
+    instance: Optional[Any] = None,
+) -> Dict[Any, List[Any]]:
+    """
+    Ensure customer stops are distributed across the available fleet vehicles,
+    preventing single-vehicle overload and ensuring no vehicle is starved of stops.
+    """
+    num_v = len(vehicle_ids)
+    if not vehicle_ids or num_v <= 1:
+        return routes
+
+    ordered_stops: List[Any] = []
+    for v_id in vehicle_ids:
+        ordered_stops.extend(routes.get(v_id, []))
+
+    if not ordered_stops:
+        return {v_id: [] for v_id in vehicle_ids}
+
+    num_stops = len(ordered_stops)
+    if num_stops < num_v:
+        new_routes = {v_id: [] for v_id in vehicle_ids}
+        for i, sid in enumerate(ordered_stops):
+            new_routes[vehicle_ids[i]].append(sid)
+        return new_routes
+
+    total_demand = 0.0
+    for sid in ordered_stops:
+        st = instance.get_stop(sid) if instance else None
+        total_demand += (st.demand if st else 2.0)
+
+    target_demand = total_demand / num_v
+    target_stops = num_stops / num_v
+
+    new_routes = {v_id: [] for v_id in vehicle_ids}
+    v_idx = 0
+    curr_load = 0.0
+    v_cap = instance.get_vehicle(vehicle_ids[v_idx]).capacity if instance else 15.0
+
+    for i, sid in enumerate(ordered_stops):
+        st = instance.get_stop(sid) if instance else None
+        dem = st.demand if st else 2.0
+        remaining_stops = num_stops - i
+        remaining_vehicles = num_v - v_idx
+
+        should_advance = False
+        if v_idx < num_v - 1 and len(new_routes[vehicle_ids[v_idx]]) >= 1:
+            if curr_load + dem > v_cap:
+                should_advance = True
+            elif remaining_stops <= remaining_vehicles:
+                should_advance = True
+            elif curr_load >= target_demand and len(new_routes[vehicle_ids[v_idx]]) >= int(target_stops):
+                should_advance = True
+
+        if should_advance:
+            v_idx += 1
+            curr_load = 0.0
+            v_cap = instance.get_vehicle(vehicle_ids[v_idx]).capacity if instance else 15.0
+
+        new_routes[vehicle_ids[v_idx]].append(sid)
+        curr_load += dem
+
+    return new_routes
+
+
 def _decode_vrp_chromosome(
     chromosome: List[Any],
     vehicle_ids: List[Any],
+    instance: Optional[Any] = None,
 ) -> Dict[Any, List[Any]]:
     """Decode chromosome containing stop IDs and split markers into vehicle routes."""
     routes: Dict[Any, List[Any]] = {v_id: [] for v_id in vehicle_ids}
@@ -658,6 +725,24 @@ def _decode_vrp_chromosome(
             v_idx = min(v_idx + 1, num_vehicles - 1)
         else:
             routes[vehicle_ids[v_idx]].append(gene)
+
+    # Automatically balance across fleet if any vehicle is starved or over capacity
+    total_stops = sum(len(r) for r in routes.values())
+    if num_vehicles > 1 and total_stops >= num_vehicles:
+        has_empty = any(len(r) == 0 for r in routes.values())
+        has_overcap = False
+        if instance is not None:
+            for v_id, s_ids in routes.items():
+                v_obj = instance.get_vehicle(v_id)
+                cap = v_obj.capacity if v_obj else 0.0
+                if cap > 0:
+                    dem = sum(instance.get_stop(sid).demand for sid in s_ids if instance.get_stop(sid))
+                    if dem > cap:
+                        has_overcap = True
+                        break
+        if has_empty or has_overcap:
+            routes = _balance_routes_across_fleet(routes, vehicle_ids, instance)
+
     return routes
 
 
@@ -907,7 +992,7 @@ def solve_vrp_qpso(
     pbest_fitnesses: List[float] = []
 
     for p in particles:
-        routes = _decode_vrp_chromosome(p, vehicle_ids)
+        routes = _decode_vrp_chromosome(p, vehicle_ids, instance)
         sol = VRPSolution(routes=routes)
         fit, violations = vrp_fitness(sol, instance, weights)
         sol.fitness = fit
@@ -951,7 +1036,7 @@ def solve_vrp_qpso(
                     if rng.random() < 0.3:
                         candidate = _vrp_mutate(candidate, rng, mutation_rate=0.5)
 
-            cand_routes = _decode_vrp_chromosome(candidate, vehicle_ids)
+            cand_routes = _decode_vrp_chromosome(candidate, vehicle_ids, instance)
             cand_sol = VRPSolution(routes=cand_routes)
             cand_fit, cand_violations = vrp_fitness(cand_sol, instance, weights)
             cand_sol.fitness = cand_fit
@@ -974,7 +1059,13 @@ def solve_vrp_qpso(
             except Exception as e:
                 log.warning("Callback error at iter %d: %s", it, e)
 
-    gbest_solution.fitness = gbest_fitness
+    # Final fleet distribution and constraint verification guarantee
+    gbest_solution.routes = _balance_routes_across_fleet(
+        gbest_solution.routes, vehicle_ids, instance
+    )
+    final_fit, final_viols = vrp_fitness(gbest_solution, instance, weights)
+    gbest_solution.fitness = final_fit
+    gbest_solution.violations = final_viols
     gbest_solution.convergence = convergence
     return gbest_solution
 
